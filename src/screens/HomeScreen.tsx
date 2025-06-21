@@ -7,6 +7,7 @@ import Fonts from "@/themes/Fonts.ts";
 import AppButton from "@/components/AppButton.tsx";
 import BottomSheet, {BottomSheetRef} from "@/components/BottomSheet.tsx";
 import {useRef, useState} from "react";
+import ScreenLayout from "@/layouts/ScreenLayout.tsx";
 
 interface ICompany {
   id: string;
@@ -48,120 +49,122 @@ export function HomeScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      {company ? (
-        <>
-          {/* Device Setup */}
-          <View style={[styles.card, styles.lightBlueBg]}>
-            <View style={styles.iconTextContainer}>
-              <View style={styles.iconContainer}>
-                <SvgIcon
-                  color={Colors.BLUE}
-                  name={Icons.SECURITY}
-                  size={Metrics.icons.small}
-                />
+    <ScreenLayout>
+      <View style={styles.container}>
+        {company ? (
+          <>
+            {/* Device Setup */}
+            <View style={[styles.card, styles.lightBlueBg]}>
+              <View style={styles.iconTextContainer}>
+                <View style={styles.iconContainer}>
+                  <SvgIcon
+                    color={Colors.BLUE}
+                    name={Icons.SECURITY}
+                    size={Metrics.icons.small}
+                  />
+                </View>
+                <Text style={styles.blueBoldLabel}>Device Setup Required</Text>
               </View>
-              <Text style={styles.blueBoldLabel}>Device Setup Required</Text>
+              <Text style={styles.blueText}>
+                To ensure your device security and management capabilities, we need to complete the setup process. This will enable important security features and device management controls.
+              </Text>
             </View>
-            <Text style={styles.blueText}>
-              To ensure your device security and management capabilities, we need to complete the setup process. This will enable important security features and device management controls.
-            </Text>
-          </View>
-          <AppButton
-            onPress={onPressBranchCard}
-            style={[styles.card, styles.lightGreenBg]}
-          >
-            <View style={styles.iconTextContainer}>
-              <View style={styles.iconContainer}>
-                <SvgIcon
-                  color={Colors.GREEN}
-                  size={Metrics.icons.small}
-                  name={Icons.CIRCLE_CHECK}
-                />
+            <AppButton
+              onPress={onPressBranchCard}
+              style={[styles.card, styles.lightGreenBg]}
+            >
+              <View style={styles.iconTextContainer}>
+                <View style={styles.iconContainer}>
+                  <SvgIcon
+                    color={Colors.GREEN}
+                    size={Metrics.icons.small}
+                    name={Icons.CIRCLE_CHECK}
+                  />
+                </View>
+                <Text style={styles.greenMediumLabel}>{company.name}-{company.branch}</Text>
+                <AppButton style={styles.branchIconButton}>
+                  <SvgIcon
+                    color={Colors.GREEN}
+                    size={Metrics.icons.tiny}
+                    name={Icons.CHEVRON_RIGHT}
+                  />
+                </AppButton>
               </View>
-              <Text style={styles.greenMediumLabel}>{company.name}-{company.branch}</Text>
-              <AppButton style={styles.branchIconButton}>
-                <SvgIcon
-                  color={Colors.GREEN}
-                  size={Metrics.icons.tiny}
-                  name={Icons.CHEVRON_RIGHT}
-                />
-              </AppButton>
-            </View>
-          </AppButton>
-          {/* Device Setup Initiator */}
-          <View style={[styles.card, styles.lightPurpleBg]}>
-            <View style={styles.iconTextContainer}>
-              <View style={styles.iconContainer}>
-                <SvgIcon
-                  name={Icons.GEAR}
-                  color={Colors.PURPLE}
-                  size={Metrics.icons.small}
-                />
-              </View>
-              <Text style={styles.purpleBoldLabel}>Device Setup</Text>
-            </View>
-            <Text style={styles.purpleText}>
-              Complete the device setup to enable security features and management controls.
-            </Text>
-            <AppButton style={styles.setupBtn}>
-              <Text style={styles.whiteMediumText}>Start Setup</Text>
             </AppButton>
-          </View>
-        </>
-      ) : (
-        <>
-          {/* Company Selection */}
-          <View style={[styles.card, styles.lightOrangeBg]}>
-            <View style={styles.iconTextContainer}>
-              <View style={styles.iconContainer}>
-                <SvgIcon
-                  color={Colors.ORANGE}
-                  name={Icons.BUILDING}
-                  size={Metrics.icons.small}
-                />
+            {/* Device Setup Initiator */}
+            <View style={[styles.card, styles.lightPurpleBg]}>
+              <View style={styles.iconTextContainer}>
+                <View style={styles.iconContainer}>
+                  <SvgIcon
+                    name={Icons.GEAR}
+                    color={Colors.PURPLE}
+                    size={Metrics.icons.small}
+                  />
+                </View>
+                <Text style={styles.purpleBoldLabel}>Device Setup</Text>
               </View>
-              <Text style={styles.orangeBoldLabel}>Select Your Company</Text>
-            </View>
-            <Text style={styles.orangeText}>
-              Please select your company and branch to begin the device setup process.
-            </Text>
-          </View>
-          {/* Branch Card */}
-          <AppButton
-            onPress={onPressBranchCard}
-            style={[styles.card, styles.lightBlueBg]}
-          >
-            <View style={styles.iconTextContainer}>
-              <View style={styles.iconContainer}>
-                <SvgIcon
-                  color={Colors.BLUE}
-                  size={Metrics.icons.small}
-                  name={Icons.BRIEFCASE}
-                />
-              </View>
-              <Text style={styles.blueMediumLabel}>Select Company & Branch</Text>
-              <AppButton style={styles.branchIconButton}>
-                <SvgIcon
-                  color={Colors.BLUE}
-                  size={Metrics.icons.tiny}
-                  name={Icons.CHEVRON_RIGHT}
-                />
+              <Text style={styles.purpleText}>
+                Complete the device setup to enable security features and management controls.
+              </Text>
+              <AppButton style={styles.setupBtn}>
+                <Text style={styles.whiteMediumText}>Start Setup</Text>
               </AppButton>
             </View>
-          </AppButton>
-        </>
-      )}
-      <AppButton
-        style={styles.setupBtn}
-        onPress={onPressDisableCamera}
-      >
-        <Text style={styles.whiteMediumText}>Disable Camera</Text>
-      </AppButton>
-      <BottomSheet ref={bottomSheetRef}>
-        <CompanySelector onSelectCompany={onSelectCompany}/>
-      </BottomSheet>
-    </View>
+          </>
+        ) : (
+          <>
+            {/* Company Selection */}
+            <View style={[styles.card, styles.lightOrangeBg]}>
+              <View style={styles.iconTextContainer}>
+                <View style={styles.iconContainer}>
+                  <SvgIcon
+                    color={Colors.ORANGE}
+                    name={Icons.BUILDING}
+                    size={Metrics.icons.small}
+                  />
+                </View>
+                <Text style={styles.orangeBoldLabel}>Select Your Company</Text>
+              </View>
+              <Text style={styles.orangeText}>
+                Please select your company and branch to begin the device setup process.
+              </Text>
+            </View>
+            {/* Branch Card */}
+            <AppButton
+              onPress={onPressBranchCard}
+              style={[styles.card, styles.lightBlueBg]}
+            >
+              <View style={styles.iconTextContainer}>
+                <View style={styles.iconContainer}>
+                  <SvgIcon
+                    color={Colors.BLUE}
+                    size={Metrics.icons.small}
+                    name={Icons.BRIEFCASE}
+                  />
+                </View>
+                <Text style={styles.blueMediumLabel}>Select Company & Branch</Text>
+                <AppButton style={styles.branchIconButton}>
+                  <SvgIcon
+                    color={Colors.BLUE}
+                    size={Metrics.icons.tiny}
+                    name={Icons.CHEVRON_RIGHT}
+                  />
+                </AppButton>
+              </View>
+            </AppButton>
+          </>
+        )}
+        <AppButton
+          style={styles.setupBtn}
+          onPress={onPressDisableCamera}
+        >
+          <Text style={styles.whiteMediumText}>Disable Camera</Text>
+        </AppButton>
+        <BottomSheet ref={bottomSheetRef}>
+          <CompanySelector onSelectCompany={onSelectCompany}/>
+        </BottomSheet>
+      </View>
+    </ScreenLayout>
   );
 }
 

@@ -4,9 +4,7 @@ import Metrics from "@/utils/Metrics.ts";
 
 const appMainContainer = {
   backgroundColor: Colors.WHITE,
-  flexGrow: 1,
-  paddingHorizontal: Metrics.scale(16),
-  paddingVertical: Metrics.verticalScale(16),
+  flex: 1,
 };
 
 const centerAlign = {
