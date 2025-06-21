@@ -1,8 +1,8 @@
 <resources>
 
-    <!-- Base application theme. -->
+    <!-- Base application themes. -->
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <!-- Customize your theme here. -->
+        <!-- Customize your themes here. -->
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
     </style>
 
