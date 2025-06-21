@@ -1,4 +1,4 @@
-import AppNavigator from "@/navigators/AppNavigator.tsx";
+import AppNavigator from "./src/navigators/AppNavigator.tsx";
 import {appMainContainer} from "./src/themes/AppStyles";
 import {SafeAreaProvider} from "react-native-safe-area-context";
 
