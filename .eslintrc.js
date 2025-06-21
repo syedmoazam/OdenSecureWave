@@ -1,6 +1,7 @@
 module.exports = {
   root: true,
   extends: '@react-native',
+  plugins: ['import'],
   settings: {
     'import/resolver': {
       alias: {

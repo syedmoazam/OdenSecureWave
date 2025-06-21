@@ -7,5 +7,5 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src", "src/types/svg.d.ts"]
+  "include": ["src", "src/types/svg.d.ts", "App.tsx", "index.js"]
 }

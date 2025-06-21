@@ -16,6 +16,9 @@ const config = {
     )
   },
   resolver: {
+    alias: {
+      '@': './src',
+    },
     assetExts: assetExts.filter((ext) => ext !== "svg"),
     sourceExts: [...sourceExts, "svg"]
   }
