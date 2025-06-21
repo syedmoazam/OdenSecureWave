@@ -50,6 +50,8 @@ const styles = StyleSheet.create({
   container: {
     borderTopLeftRadius: Metrics.scale(20),
     borderTopRightRadius: Metrics.scale(20),
+    paddingHorizontal: Metrics.scale(16),
+    paddingVertical: Metrics.verticalScale(16),
   },
   wrapper: {
     backgroundColor: Colors.OVERLAY,
