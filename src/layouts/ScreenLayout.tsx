@@ -1,9 +1,14 @@
-import React, {ReactNode} from 'react';
-import {StyleSheet, View} from "react-native";
+import React from 'react';
+import {StyleProp, StyleSheet, View, ViewStyle} from "react-native";
 import Metrics from "@/utils/Metrics.ts";
 
-const ScreenLayout = ({ children }: { children: ReactNode }) => (
-  <View style={styles.container}>
+interface ScreenLayoutProps {
+  children: React.ReactNode;
+  containerStyle?: StyleProp<ViewStyle>;
+}
+
+const ScreenLayout: React.FC<ScreenLayoutProps> = ({ children, containerStyle }) => (
+  <View style={[styles.container, containerStyle]}>
     {children}
   </View>
 );
