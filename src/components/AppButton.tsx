@@ -12,6 +12,7 @@ interface IButtonView {
   onLongPress?: () => void;
   disableRipple?: boolean;
   enableClick?: boolean;
+  activeOpacity?: number;
 }
 
 function AppButton({

@@ -16,6 +16,14 @@ function getSvgIcon(name: string) {
       return require('@/assets/icons/gear.svg').default;
     case Icons.CIRCLE_CHECK:
       return require('@/assets/icons/circle-check.svg').default;
+    case Icons.TRIANGLE_EXCLAMATION:
+      return require('@/assets/icons/triangle-exclamation.svg').default;
+    case Icons.MESSAGE:
+      return require('@/assets/icons/message.svg').default;
+    case Icons.CHEVRON_DOWN:
+      return require('@/assets/icons/chevron-down.svg').default;
+    case Icons.CHEVRON_UP:
+      return require('@/assets/icons/chevron-up.svg').default;
     default:
   }
 }
@@ -27,14 +35,16 @@ const ICON_COLOR_PROP: Record<string, 'fill' | 'stroke'> = {
   [Icons.SECURITY]: 'fill',
   [Icons.GEAR]: 'fill',
   [Icons.CIRCLE_CHECK]: 'fill',
+  [Icons.TRIANGLE_EXCLAMATION]: 'fill',
+  [Icons.MESSAGE]: 'fill',
 };
 
-export default function SvgIcon({
+const SvgIcon = ({
   size = Metrics.icons.normal,
   name = "",
   color = "",
   ...rest
-}) {
+}) => {
   const Component = getSvgIcon(name);
 
   if (!Component) {
@@ -53,3 +63,4 @@ export default function SvgIcon({
     />
   );
 }
+export default SvgIcon;

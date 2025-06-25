@@ -12,13 +12,15 @@ export const Colors = {
   LIGHT_PURPLE: "#EAD2EE",
   PURPLE: "#8E24AA",
   LIGHT_GREEN: "#D1EBD3",
-  GREEN: "#388E3D"
+  GREEN: "#388E3D",
+  RED: "#F54236",
+  PRIMARY_BLUE: "#2096F3"
 };
 
 export const TOAST_COLORS = {
   success: Colors.GREEN,
-  error: "red",
-  info: "#3A3A3D",
+  error: Colors.RED,
+  info: Colors.PRIMARY_BLUE,
 };
 
 export const APP_PRIMARY_TEXT = Colors.CHARCOAL_GREY;
