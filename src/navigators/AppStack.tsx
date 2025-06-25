@@ -10,10 +10,14 @@ const AppStack = () => {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name={routes.APP_STACK.EMERGENCY} component={EmergencyScreen} />
       <Stack.Screen name={routes.APP_STACK.HOME} component={HomeScreen} />
+      
       <Stack.Screen 
         name={routes.APP_STACK.DEVICE_ADMIN} 
         component={DeviceAdminScreen}
-        options={{ title: 'Device Admin Manager' }}
+        options={{ 
+          title: 'Device Admin Manager',
+          headerShown: true  // Enable header just for this screen
+        }}
       />
     </Stack.Navigator>
   )

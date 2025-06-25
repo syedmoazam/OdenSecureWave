@@ -1,6 +1,5 @@
 import {ReactNode, useEffect, useRef, useState} from "react";
 import {Dimensions, StyleSheet, Text, Animated, View} from "react-native";
-import {SceneMap, TabBar, TabView} from "react-native-tab-view";
 import AlertTab from "./tabs/AlertTab";
 import {Colors} from "@/themes/Colors";
 import Metrics from "@/utils/Metrics";
@@ -33,33 +32,30 @@ const routes = [
   }
 ];
 
-const renderScene = SceneMap({
-  [tabRouteKeys.ALERT]: AlertTab,
-  [tabRouteKeys.FAQ]: FAQTab,
-})
 
 
 const tabWidth = initialLayout.width / routes.length;
+
 const EmergencyScreen = () => {
-  const [index, setIndex] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(0);
   const indicatorX = useRef(new Animated.Value(0));
 
   useEffect(() => {
     Animated.spring(indicatorX.current, {
-      toValue: index * tabWidth,
+      toValue: activeIndex * tabWidth,
       useNativeDriver: false,
     }).start();
-  }, [index]);
+  }, [activeIndex]);
 
   const renderTabBar = () => (
     <View style={styles.tabBar}>
       {routes.map((route, i) => {
-        const focused = i === index;
+        const focused = i === activeIndex;
         const tabColor = focused ? Colors.WHITE : Colors.GRAY;
         return (
           <AppButton
             key={route.key}
-            onPress={() => setIndex(i)}
+            onPress={() => setActiveIndex(i)}
             style={styles.tabItem}
           >
             <SvgIcon
@@ -87,24 +83,34 @@ const EmergencyScreen = () => {
     </View>
   );
 
+  const renderScene = () => {
+    switch (activeIndex) {
+      case 0:
+        return <AlertTab />;
+      case 1:
+        return <FAQTab />;
+      default:
+        return <AlertTab />;
+    }
+  };
+
   return (
-    <>
+    <View style={styles.container}>
       <View style={styles.emergencyHeader}>
         <Text style={styles.emergencyHeaderText}>EMERGENCY NOTICE</Text>
       </View>
-      <TabView
-        onIndexChange={setIndex}
-        navigationState={{ index, routes }}
-        renderScene={renderScene}
-        renderTabBar={renderTabBar}
-        initialLayout={initialLayout}
-        lazy
-      />
-    </>
+      {renderTabBar()}
+      <View style={styles.sceneContainer}>
+        {renderScene()}
+      </View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   emergencyHeader: {
     backgroundColor: Colors.RED,
     paddingVertical: Metrics.verticalScale(40),
@@ -129,6 +135,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.WHITE,
     bottom: 0,
     borderRadius: Metrics.scale(2),
+  },
+  sceneContainer: {
+    flex: 1,
   },
 })
 

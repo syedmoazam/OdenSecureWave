@@ -19,7 +19,13 @@ const DeviceAdminScreen: React.FC = () => {
 
   const deviceAdmin = DeviceAdminManager.getInstance();
 
+  // Add debug logging
+  console.log('🚀 DeviceAdminScreen component mounted');
+  console.log('📱 Platform:', Platform.OS);
+  console.log('🔧 DeviceAdmin instance:', deviceAdmin ? 'Available' : 'Not available');
+
   useEffect(() => {
+    console.log('🔄 useEffect triggered - initial status check');
     checkAdminStatus();
     checkBootStatus();
     checkCameraStatus();
@@ -43,6 +49,7 @@ const DeviceAdminScreen: React.FC = () => {
       if (Platform.OS === 'android') {
         const enabled = await deviceAdmin.isDeviceAdminEnabled();
         setIsAdminEnabled(enabled);
+        console.log('🔑 Admin status checked:', enabled);
       }
     } catch (error) {
       console.error('Error checking admin status:', error);
@@ -54,6 +61,7 @@ const DeviceAdminScreen: React.FC = () => {
       if (Platform.OS === 'android') {
         const status = await deviceAdmin.checkBootCompletedStatus();
         setBootStatus(status);
+        console.log('🔄 Boot status checked:', status);
       }
     } catch (error) {
       console.error('Error checking boot status:', error);
@@ -65,6 +73,7 @@ const DeviceAdminScreen: React.FC = () => {
       if (Platform.OS === 'android' && isAdminEnabled) {
         const disabled = await deviceAdmin.isCameraDisabled();
         setIsCameraDisabled(disabled);
+        console.log('📷 Camera status checked:', disabled);
       }
     } catch (error) {
       console.error('Error checking camera status:', error);
@@ -167,14 +176,24 @@ const DeviceAdminScreen: React.FC = () => {
   };
 
   const handleTestBridge = async () => {
+    console.log('🔧 Testing bridge connection...');
     try {
       setLoading(true);
+      console.log('📞 Calling deviceAdmin.testBridge()...');
       const result = await deviceAdmin.testBridge();
+      console.log('✅ Bridge test successful:', result);
       Alert.alert('Bridge Test', result);
     } catch (error: any) {
+      console.error('❌ Bridge test failed:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
       Alert.alert('Bridge Test Failed', error.message || 'Bridge is not working');
     } finally {
       setLoading(false);
+      console.log('🏁 Bridge test completed');
     }
   };
 
@@ -248,7 +267,7 @@ const DeviceAdminScreen: React.FC = () => {
         </Text>
       </View>
     );
-  }
+  } 
 
   return (
     <ScrollView style={styles.container}>
