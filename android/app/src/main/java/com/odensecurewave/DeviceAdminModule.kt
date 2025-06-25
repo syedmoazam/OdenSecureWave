@@ -315,12 +315,14 @@ class DeviceAdminModule(reactContext: ReactApplicationContext) : ReactContextBas
                     promise.resolve("Device admin disabled successfully")
                 } else {
                     Log.w("DeviceAdminModule", "Device admin is still active after removal attempt")
-                    promise.reject("ERROR", "Cannot disable device admin programmatically. Please go to Settings > Security > Device admin apps and disable it manually.")
+                    ErrorLogger.logWarning(reactApplicationContext, "DeviceAdminModule", "disableDeviceAdmin", "Device admin still active after removal attempt")
+                    promise.reject("MANUAL_DISABLE_REQUIRED", "Device Admin cannot be disabled programmatically for security reasons. Please disable manually:\n\n1. Go to Settings → Security\n2. Find 'Device admin apps'\n3. Select 'OdenSecureWave'\n4. Tap 'Deactivate'\n\nThis is an Android security feature to prevent malicious apps from removing security controls.")
                 }
                 
             } catch (securityException: SecurityException) {
                 Log.e("DeviceAdminModule", "Security exception when disabling device admin", securityException)
-                promise.reject("ERROR", "Cannot disable device admin programmatically. Please go to Settings > Security > Device admin apps and disable it manually.")
+                ErrorLogger.logWarning(reactApplicationContext, "DeviceAdminModule", "disableDeviceAdmin", "Security restriction: programmatic disable not allowed", mapOf("exception" to securityException.message))
+                promise.reject("MANUAL_DISABLE_REQUIRED", "For security reasons, Device Admin must be disabled manually. Go to: Settings → Security → Device admin apps → OdenSecureWave → Deactivate")
             }
             
         } catch (e: Exception) {
@@ -401,6 +403,60 @@ class DeviceAdminModule(reactContext: ReactApplicationContext) : ReactContextBas
         } catch (e: Exception) {
             ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "getPrivilegeStatus", e)
             promise.reject("ERROR", "Failed to check privilege status: ${e.message}")
+        }
+    }
+
+    @ReactMethod
+    fun canDisableDeviceAdmin(promise: Promise) {
+        try {
+            val isDeviceAdminActive = devicePolicyManager.isAdminActive(adminComponentName)
+            
+            if (!isDeviceAdminActive) {
+                promise.resolve(WritableNativeMap().apply {
+                    putBoolean("canDisable", false)
+                    putString("reason", "Device admin is not currently active")
+                    putString("action", "none")
+                })
+                return
+            }
+
+            // Check if we're device owner (device owners can remove themselves)
+            val isDeviceOwner = try {
+                devicePolicyManager.isDeviceOwnerApp(reactApplicationContext.packageName)
+            } catch (e: Exception) {
+                false
+            }
+
+            val canDisable = isDeviceOwner
+            val reason = if (canDisable) {
+                "Device Owner can disable programmatically"
+            } else {
+                "Regular Device Admin must be disabled manually for security"
+            }
+            
+            val action = if (canDisable) {
+                "Use disable button in app"
+            } else {
+                "Go to Settings → Security → Device admin apps → OdenSecureWave → Deactivate"
+            }
+
+            promise.resolve(WritableNativeMap().apply {
+                putBoolean("canDisable", canDisable)
+                putString("reason", reason)
+                putString("action", action)
+                putBoolean("isDeviceOwner", isDeviceOwner)
+                putBoolean("isDeviceAdminActive", isDeviceAdminActive)
+            })
+
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "canDisableDeviceAdmin", "Disable capability checked", mapOf(
+                "canDisable" to canDisable,
+                "isDeviceOwner" to isDeviceOwner,
+                "isDeviceAdminActive" to isDeviceAdminActive
+            ))
+
+        } catch (e: Exception) {
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "canDisableDeviceAdmin", e)
+            promise.reject("ERROR", "Failed to check disable capability: ${e.message}")
         }
     }
 
