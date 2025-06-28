@@ -121,6 +121,13 @@ android {
     }
 }
 
+// Add this to ensure codegen runs before CMake tasks
+tasks.whenTaskAdded { task ->
+    if (task.name.contains('configureCMake')) {
+        task.dependsOn 'generateCodegenArtifactsFromSchema'
+    }
+}
+
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
