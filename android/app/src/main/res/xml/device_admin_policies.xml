@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <device-admin xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-policies>
+        <!-- Legacy Device Admin Policies -->
         <limit-password />
         <watch-login />
         <reset-password />
@@ -10,5 +11,9 @@
         <encrypted-storage />
         <disable-camera />
         <disable-keyguard-features />
+        
+        <!-- Android 12+ Device Owner Policies -->
+        <uses-policy android:name="android.app.policy.DEVICE_OWNER" />
+        <uses-policy android:name="android.app.policy.MANAGED_PROFILE_OWNER" />
     </uses-policies>
 </device-admin>
