@@ -1,4 +1,4 @@
-import {FlatList, StyleSheet, Text, View} from 'react-native';
+import {FlatList, StyleSheet, Text, View, Alert} from 'react-native';
 import SvgIcon from "@/components/SvgIcon.tsx";
 import Icons from "@/constants/icons.ts";
 import Metrics from "@/utils/Metrics.ts";
@@ -6,8 +6,11 @@ import {Colors} from "@/themes/Colors.ts";
 import Fonts from "@/themes/Fonts.ts";
 import AppButton from "@/components/AppButton.tsx";
 import BottomSheet, {BottomSheetRef} from "@/components/BottomSheet.tsx";
-import {useRef, useState} from "react";
+import {useRef, useState, useEffect, useCallback} from "react";
 import ScreenLayout from "@/layouts/ScreenLayout.tsx";
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import routes from '@/constants/routes';
+import DeviceAdminManager from '@/services/DeviceAdminManager';
 
 interface ICompany {
   id: string;
@@ -29,7 +32,57 @@ const companyData = [
 
 export function HomeScreen() {
   const [company, setCompany] = useState<ICompany | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [isCameraDisabled, setIsCameraDisabled] = useState<boolean>(false);
+  const [isAdminEnabled, setIsAdminEnabled] = useState<boolean>(false);
   const bottomSheetRef = useRef<BottomSheetRef>(null);
+  const navigation = useNavigation();
+  const deviceAdmin = DeviceAdminManager.getInstance();
+
+  useEffect(() => {
+    checkStatuses();
+  }, []);
+
+  // Refresh status when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log('HomeScreen focused - refreshing status');
+      checkStatuses();
+    }, [])
+  );
+
+  const checkStatuses = async () => {
+    try {
+      console.log('Checking device admin and camera status...');
+      
+      // Check admin status
+      const adminStatus = await deviceAdmin.isDeviceAdminEnabled();
+      console.log('Admin status:', adminStatus);
+      setIsAdminEnabled(adminStatus);
+      
+      // Only check camera status if admin is enabled
+      if (adminStatus) {
+        try {
+          const cameraStatus = await deviceAdmin.isCameraDisabled();
+          console.log('Camera disabled:', cameraStatus);
+          setIsCameraDisabled(cameraStatus);
+        } catch (cameraError) {
+          console.warn('Could not check camera status:', cameraError);
+          // Set to false if we can't check (likely permission issue)
+          setIsCameraDisabled(false);
+        }
+      } else {
+        // Reset camera status if admin is disabled
+        setIsCameraDisabled(false);
+      }
+      
+    } catch (error) {
+      console.error('Error checking device admin/camera status:', error);
+      // Set safe defaults on error
+      setIsAdminEnabled(false);
+      setIsCameraDisabled(false);
+    }
+  };
 
   const onPressBranchCard = () => {
     if (bottomSheetRef.current) {
@@ -44,8 +97,82 @@ export function HomeScreen() {
     }
   }
 
-  const onPressDisableCamera = () => {
-    // Logic to disable camera
+  const onPressDisableCamera = async () => {
+    try {
+      setLoading(true);
+      
+      // Check if device admin is enabled first
+      const isAdminEnabled = await deviceAdmin.isDeviceAdminEnabled();
+      if (!isAdminEnabled) {
+        Alert.alert(
+          'Device Admin Required',
+          'Please enable device admin first to control camera access.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Go to Device Admin', onPress: onPressDeviceAdmin },
+          ]
+        );
+        return;
+      }
+
+      // Check current camera status
+      const currentCameraStatus = await deviceAdmin.isCameraDisabled();
+      
+      // Toggle camera status
+      const newStatus = !currentCameraStatus;
+      
+      try {
+        const result = await deviceAdmin.setCameraDisabled(newStatus);
+        
+        // Wait a bit for the system to process the change
+        await new Promise<void>(resolve => setTimeout(() => resolve(), 500));
+        
+        // Refresh statuses to ensure UI is updated
+        await checkStatuses();
+        
+        Alert.alert(
+          'Success', 
+          `Camera ${newStatus ? 'disabled' : 'enabled'} successfully`
+        );
+        
+      } catch (error: any) {
+        console.error('Camera control error:', error);
+        
+        if (error.code === 'PERMISSION_ERROR') {
+          Alert.alert(
+            'Insufficient Privileges', 
+            'Camera control requires Device Owner or Profile Owner privileges.\n\nCurrently detected:\n• Regular Device Admin: ✅\n• Device Owner: ❌\n• Profile Owner: ❌\n\nThis device appears to have another Device Owner app installed, preventing camera control.',
+            [
+              { text: 'OK', style: 'default' },
+              { 
+                text: 'Check Status', 
+                onPress: () => {
+                  // Navigate to device admin screen to see more details
+                  onPressDeviceAdmin();
+                }
+              }
+            ]
+          );
+        } else {
+          Alert.alert('Error', error.message || 'Failed to control camera');
+        }
+        
+        // Refresh UI even on error to show correct status
+        await checkStatuses();
+      }
+      
+    } catch (error: any) {
+      console.error('General camera control error:', error);
+      Alert.alert('Error', error.message || 'Failed to control camera');
+      // Refresh UI even on error
+      await checkStatuses();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onPressDeviceAdmin = () => {
+    navigation.navigate(routes.APP_STACK.DEVICE_ADMIN as never);
   }
 
   return (
@@ -110,7 +237,44 @@ export function HomeScreen() {
                 <Text style={styles.whiteMediumText}>Start Setup</Text>
               </AppButton>
             </View>
-          </>
+            
+          {/* Camera Control */}
+          <View style={[styles.card, styles.lightPurpleBg]}>
+            <View style={styles.iconTextContainer}>
+              <View style={styles.iconContainer}>
+                <SvgIcon
+                  name={Icons.SECURITY}
+                  color={Colors.PURPLE}
+                  size={Metrics.icons.small}
+                />
+              </View>
+              <Text style={styles.purpleBoldLabel}>Camera Control</Text>
+            </View>
+            <Text style={styles.purpleText}>
+              Camera Status: {isCameraDisabled ? '🚫 Disabled' : '📷 Enabled'}
+            </Text>
+            <Text style={styles.purpleText}>
+              Admin Status: {isAdminEnabled ? '✅ Enabled' : '❌ Disabled'}
+            </Text>
+            <View style={styles.buttonContainer}>
+              <AppButton 
+                style={[styles.controlBtn, { backgroundColor: isCameraDisabled ? Colors.GREEN : "#FF6B6B" }]}
+                onPress={onPressDisableCamera}
+                disabled={loading}
+              >
+                <Text style={styles.whiteMediumText}>
+                  {loading ? 'Processing...' : (isCameraDisabled ? 'Enable Camera' : 'Disable Camera')}
+                </Text>
+              </AppButton>
+              <AppButton 
+                style={[styles.controlBtn, { backgroundColor: Colors.BLUE }]}
+                onPress={onPressDeviceAdmin}
+              >
+                <Text style={styles.whiteMediumText}>Device Admin</Text>
+              </AppButton>
+            </View>
+          </View>
+        </>
         ) : (
           <>
             {/* Company Selection */}
@@ -154,13 +318,45 @@ export function HomeScreen() {
             </AppButton>
           </>
         )}
-        <AppButton
-          style={styles.setupBtn}
-          onPress={onPressDisableCamera}
-        >
-          <Text style={styles.whiteMediumText}>Disable Camera</Text>
-        </AppButton>
-        <BottomSheet ref={bottomSheetRef}>
+        
+      {/* Camera Control - Always Visible */}
+      <View style={[styles.card, styles.lightPurpleBg]}>
+        <View style={styles.iconTextContainer}>
+          <View style={styles.iconContainer}>
+            <SvgIcon
+              name={Icons.SECURITY}
+              color={Colors.PURPLE}
+              size={Metrics.icons.small}
+            />
+          </View>
+          <Text style={styles.purpleBoldLabel}>Camera Control</Text>
+        </View>
+        <Text style={styles.purpleText}>
+          Camera Status: {isCameraDisabled ? '🚫 Disabled' : '📷 Enabled'}
+        </Text>
+        <Text style={styles.purpleText}>
+          Admin Status: {isAdminEnabled ? '✅ Enabled' : '❌ Disabled'}
+        </Text>
+        <View style={styles.buttonContainer}>
+          <AppButton 
+              style={[styles.controlBtn, { backgroundColor: isCameraDisabled ? Colors.GREEN : "#FF6B6B" }]}
+              onPress={onPressDisableCamera}
+              disabled={loading}
+          >
+              <Text style={styles.whiteMediumText}>
+              {loading ? 'Processing...' : (isCameraDisabled ? 'Enable Camera' : 'Disable Camera')}
+            </Text>
+          </AppButton>
+          <AppButton 
+            style={[styles.controlBtn, { backgroundColor: Colors.BLUE }]}
+            onPress={onPressDeviceAdmin}
+          >
+            <Text style={styles.whiteMediumText}>Device Admin</Text>
+            </AppButton>
+          </View>
+      </View>
+      
+      <BottomSheet ref={bottomSheetRef}>
           <CompanySelector onSelectCompany={onSelectCompany}/>
         </BottomSheet>
       </View>
@@ -274,6 +470,18 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.PURPLE,
     borderRadius: Metrics.scale(10),
   },
+  buttonContainer: {
+    flexDirection: "row",
+    gap: Metrics.scale(8),
+    marginTop: Metrics.verticalScale(8),
+  },
+  controlBtn: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: Metrics.verticalScale(12),
+    borderRadius: Metrics.scale(10),
+    marginHorizontal: Metrics.scale(4),
+  },
 
   // Text
   blueBoldLabel: Fonts.Bold(Fonts.Size.large, Colors.BLUE),
@@ -283,11 +491,13 @@ const styles = StyleSheet.create({
   companyName: Fonts.Bold(Fonts.Size.normal, Colors.DARK),
   orangeBoldLabel: Fonts.Bold(Fonts.Size.large, Colors.ORANGE),
   purpleBoldLabel: Fonts.Bold(Fonts.Size.large, Colors.PURPLE),
+  redBoldLabel: Fonts.Bold(Fonts.Size.large, "#FF6B6B"),
   blueText: Fonts.Regular(Fonts.Size.xSmall, Colors.BLUE),
   companySelectorText: Fonts.Regular(Fonts.Size.xSmall, Colors.BLUE),
   branchName: Fonts.Regular(Fonts.Size.xxSmall, Colors.CHARCOAL_GREY),
   orangeText: Fonts.Regular(Fonts.Size.xSmall, Colors.ORANGE),
   purpleText: Fonts.Regular(Fonts.Size.xSmall, Colors.PURPLE),
+  redText: Fonts.Regular(Fonts.Size.xSmall, "#FF6B6B"),
   whiteMediumText: Fonts.Medium(Fonts.Size.normal, Colors.WHITE),
 
   // Backgrounds
@@ -295,4 +505,5 @@ const styles = StyleSheet.create({
   lightOrangeBg: { backgroundColor: Colors.LIGHT_ORANGE },
   lightPurpleBg: { backgroundColor: Colors.LIGHT_PURPLE },
   lightGreenBg: { backgroundColor: Colors.LIGHT_GREEN },
+  lightRedBg: { backgroundColor: "#FFE6E6" },
 })
