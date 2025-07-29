@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import FirebaseMessagingService from '@/services/firebaseMessagingService';
+import NotificationService from '@/services/notificationService.ts';
 import { AppNotification, NotificationType } from '@/types/notifications';
 
 interface UseNotificationsReturn {
@@ -23,7 +23,7 @@ export const useNotifications = (): UseNotificationsReturn => {
   useEffect(() => {
     const initializeService = async () => {
       try {
-        const messagingService = FirebaseMessagingService.getInstance();
+        const messagingService = NotificationService.getInstance();
         await messagingService.initialize();
         
         const token = messagingService.getCurrentToken();
@@ -51,12 +51,12 @@ export const useNotifications = (): UseNotificationsReturn => {
   }, []);
 
   const subscribeToTopic = useCallback(async (topic: string) => {
-    const messagingService = FirebaseMessagingService.getInstance();
+    const messagingService = NotificationService.getInstance();
     await messagingService.subscribeToTopic(topic);
   }, []);
 
   const unsubscribeFromTopic = useCallback(async (topic: string) => {
-    const messagingService = FirebaseMessagingService.getInstance();
+    const messagingService = NotificationService.getInstance();
     await messagingService.unsubscribeFromTopic(topic);
   }, []);
 

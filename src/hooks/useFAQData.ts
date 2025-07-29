@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import FirebaseDatabaseService from '@/services/firebaseDatabaseService';
+import DatabaseService from '@/services/databaseService.ts';
 import { FAQItem, FAQState } from '@/types/faq';
 
 // Fallback mock data
@@ -33,7 +33,7 @@ export const useFAQData = () => {
     error: null
   });
 
-  const databaseService = FirebaseDatabaseService.getInstance();
+  const databaseService = DatabaseService.getInstance();
 
   const fetchFAQData = async () => {
     try {

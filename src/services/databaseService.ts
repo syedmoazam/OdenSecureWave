@@ -2,15 +2,15 @@ import database from '@react-native-firebase/database';
 import { FAQItem } from '@/types/faq';
 import { CompanyData, CompanyItem } from '@/types/company';
 
-class FirebaseDatabaseService {
-  private static instance: FirebaseDatabaseService;
+class DatabaseService {
+  private static instance: DatabaseService;
   private databaseRef: any;
 
-  public static getInstance(): FirebaseDatabaseService {
-    if (!FirebaseDatabaseService.instance) {
-      FirebaseDatabaseService.instance = new FirebaseDatabaseService();
+  public static getInstance(): DatabaseService {
+    if (!DatabaseService.instance) {
+      DatabaseService.instance = new DatabaseService();
     }
-    return FirebaseDatabaseService.instance;
+    return DatabaseService.instance;
   }
 
   private constructor() {
@@ -98,4 +98,4 @@ class FirebaseDatabaseService {
   }
 }
 
-export default FirebaseDatabaseService; 
+export default DatabaseService;

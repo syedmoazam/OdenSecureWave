@@ -2,8 +2,8 @@ import messaging, { FirebaseMessagingTypes } from '@react-native-firebase/messag
 import { Platform, PermissionsAndroid } from 'react-native';
 import { NotificationType, AppNotification, NotificationConfig } from '@/types/notifications';
 
-class FirebaseMessagingService {
-  private static instance: FirebaseMessagingService;
+class NotificationService {
+  private static instance: NotificationService;
   private fcmToken: string | null = null;
   private isInitialized = false;
   private notificationCallbacks: Array<(notification: AppNotification) => void> = [];
@@ -28,11 +28,11 @@ class FirebaseMessagingService {
     },
   };
 
-  public static getInstance(): FirebaseMessagingService {
-    if (!FirebaseMessagingService.instance) {
-      FirebaseMessagingService.instance = new FirebaseMessagingService();
+  public static getInstance(): NotificationService {
+    if (!NotificationService.instance) {
+      NotificationService.instance = new NotificationService();
     }
-    return FirebaseMessagingService.instance;
+    return NotificationService.instance;
   }
 
   private constructor() {}
@@ -327,4 +327,4 @@ class FirebaseMessagingService {
   }
 }
 
-export default FirebaseMessagingService; 
+export default NotificationService;
