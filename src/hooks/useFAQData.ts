@@ -37,15 +37,16 @@ export const useFAQData = () => {
 
   const fetchFAQData = async () => {
     try {
-      const isConnected = await databaseService.isConnected();
-      if (!isConnected) {
-        setState({
-          data: fallbackFAQData,
-          loading: false,
-          error: 'No internet connection. Showing cached version.'
-        });
-        return;
-      }
+      // Bug: When data is loaded for the first time, it returns connection as false
+      // const isConnected = await databaseService.isConnected();
+      // if (!isConnected) {
+      //   setState({
+      //     data: fallbackFAQData,
+      //     loading: false,
+      //     error: 'No internet connection. Showing cached version.'
+      //   });
+      //   return;
+      // }
       setState(prev => ({ ...prev, loading: true, error: null }));
       
       const data = await databaseService.getFAQData();
