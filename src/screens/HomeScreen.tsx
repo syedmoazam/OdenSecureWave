@@ -11,24 +11,14 @@ import ScreenLayout from "@/layouts/ScreenLayout.tsx";
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import routes from '@/constants/routes';
 import DeviceAdminManager from '@/services/DeviceAdminManager';
+import { useCompanyData } from '@/hooks/useCompanyData';
+import { CompanyItem } from '@/types/company';
 
 interface ICompany {
   id: string;
   name: string;
   branch: string;
 }
-const companyData = [
-  { id: '1', name: 'Company A', branch: 'Branch 1' },
-  { id: '2', name: 'Company B', branch: 'Branch 2' },
-  { id: '3', name: 'Company C', branch: 'Branch 3' },
-  { id: '4', name: 'Company D', branch: 'Branch 4' },
-  { id: '5', name: 'Company E', branch: 'Branch 5' },
-  { id: '6', name: 'Company F', branch: 'Branch 6' },
-  { id: '7', name: 'Company G', branch: 'Branch 7' },
-  { id: '8', name: 'Company H', branch: 'Branch 8' },
-  { id: '9', name: 'Company I', branch: 'Branch 9' },
-  { id: '10', name: 'Company J', branch: 'Branch 10' },
-] as ICompany[];
 
 export function HomeScreen() {
   const [company, setCompany] = useState<ICompany | null>(null);
@@ -38,6 +28,9 @@ export function HomeScreen() {
   const bottomSheetRef = useRef<BottomSheetRef>(null);
   const navigation = useNavigation();
   const deviceAdmin = DeviceAdminManager.getInstance();
+  
+  // Use the company data hook
+  const { data: companyData, loading: companyLoading, error: companyError, refreshData: refreshCompanyData } = useCompanyData();
 
   useEffect(() => {
     checkStatuses();
@@ -356,8 +349,14 @@ export function HomeScreen() {
           </View>
       </View>
       
-      <BottomSheet ref={bottomSheetRef}>
-          <CompanySelector onSelectCompany={onSelectCompany}/>
+        <BottomSheet ref={bottomSheetRef}>
+          <CompanySelector 
+            onSelectCompany={onSelectCompany}
+            companyData={companyData}
+            loading={companyLoading}
+            error={companyError}
+            onRefresh={refreshCompanyData}
+          />
         </BottomSheet>
       </View>
     </ScreenLayout>
@@ -365,9 +364,20 @@ export function HomeScreen() {
 }
 
 interface ICompanySelectorProps {
-  onSelectCompany: (company: ICompany) => void,
+  onSelectCompany: (company: ICompany) => void;
+  companyData: CompanyItem[];
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
 }
-const CompanySelector = ({ onSelectCompany }: ICompanySelectorProps) => {
+
+const CompanySelector = ({ 
+  onSelectCompany, 
+  companyData, 
+  loading, 
+  error, 
+  onRefresh 
+}: ICompanySelectorProps) => {
   return (
     <View style={styles.container}>
       <View style={styles.iconTextContainer}>
@@ -379,11 +389,21 @@ const CompanySelector = ({ onSelectCompany }: ICompanySelectorProps) => {
       <Text style={styles.companySelectorText}>
         Choose your company and branch to proceed with the setup
       </Text>
+      
+      {error && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <Text style={styles.retryText} onPress={onRefresh}>
+            Tap to retry
+          </Text>
+        </View>
+      )}
+      
       <FlatList
         style={styles.listStyle}
         contentContainerStyle={styles.companyListContentContainer}
         data={companyData}
-        keyExtractor={(_item, index) => index.toString()}
+        keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <AppButton onPress={() => onSelectCompany(item)} style={styles.companyCard}>
             <View style={styles.companyIconContainer}>
@@ -398,6 +418,8 @@ const CompanySelector = ({ onSelectCompany }: ICompanySelectorProps) => {
             </View>
           </AppButton>
         )}
+        refreshing={loading}
+        onRefresh={onRefresh}
       />
     </View>
   )
@@ -506,4 +528,22 @@ const styles = StyleSheet.create({
   lightPurpleBg: { backgroundColor: Colors.LIGHT_PURPLE },
   lightGreenBg: { backgroundColor: Colors.LIGHT_GREEN },
   lightRedBg: { backgroundColor: "#FFE6E6" },
+  errorContainer: {
+    paddingHorizontal: Metrics.scale(20),
+    paddingVertical: Metrics.verticalScale(12),
+    backgroundColor: Colors.RED + '20',
+    marginBottom: Metrics.verticalScale(8),
+  },
+  errorText: {
+    ...Fonts.Regular(Fonts.Size.small),
+    textAlign: 'center',
+    color: Colors.RED,
+    marginBottom: Metrics.verticalScale(4),
+  },
+  retryText: {
+    ...Fonts.Medium(Fonts.Size.small),
+    color: Colors.PRIMARY_BLUE,
+    textDecorationLine: 'underline',
+    textAlign: 'center',
+  },
 })

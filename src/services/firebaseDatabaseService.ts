@@ -1,5 +1,6 @@
 import database from '@react-native-firebase/database';
 import { FAQItem } from '@/types/faq';
+import { CompanyData, CompanyItem } from '@/types/company';
 
 class FirebaseDatabaseService {
   private static instance: FirebaseDatabaseService;
@@ -63,6 +64,35 @@ class FirebaseDatabaseService {
       }));
     } catch (error) {
       console.error('Error fetching FAQ data:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch company data from Firebase Realtime Database
+   */
+  public async getCompanyData(): Promise<CompanyItem[]> {
+    try {
+      const snapshot = await this.databaseRef.ref('Company').once('value');
+      const data = snapshot.val();
+      
+      if (!data) {
+        return [];
+      }
+
+      // Convert Firebase object to array of CompanyItem
+      const companyItems: CompanyItem[] = Object.entries(data).map(([key, value]: [string, any]) => {
+        const companyData = value as CompanyData;
+        return {
+          id: key,
+          name: companyData.companyName,
+          branch: companyData.branchName
+        };
+      });
+
+      return companyItems;
+    } catch (error) {
+      console.error('Error fetching company data:', error);
       throw error;
     }
   }

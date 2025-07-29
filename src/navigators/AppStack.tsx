@@ -8,8 +8,8 @@ const Stack = createNativeStackNavigator();
 const AppStack = () => {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name={routes.APP_STACK.EMERGENCY} component={EmergencyScreen} />
       <Stack.Screen name={routes.APP_STACK.HOME} component={HomeScreen} />
+      <Stack.Screen name={routes.APP_STACK.EMERGENCY} component={EmergencyScreen} />
       
       <Stack.Screen 
         name={routes.APP_STACK.DEVICE_ADMIN} 
