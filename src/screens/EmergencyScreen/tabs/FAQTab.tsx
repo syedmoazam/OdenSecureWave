@@ -2,46 +2,85 @@ import Accordion from "@/components/Accordion";
 import ScreenLayout from "@/layouts/ScreenLayout";
 import Fonts from "@/themes/Fonts";
 import Metrics from "@/utils/Metrics";
-import { FlatList, StyleSheet, Text } from "react-native";
+import { useFAQData } from "@/hooks/useFAQData";
+import { FlatList, StyleSheet, Text, View, ActivityIndicator } from "react-native";
+import { Colors } from "@/themes/Colors";
 
-const faqContent = [
-  {
-    "description": "Your device is locked due to overdue payment. Once payment is made, your device will be automatically unlocked.",
-    "title": "Why is my device locked?"
-  },
-  {
-    "description": "You can make a payment using the \"Make Payment Now\" button on the Alert tab, or contact our support team for assistance.",
-    "title": "How can I make a payment?"
-  },
-  {
-    "description": "Your device will be automatically unlocked within 24 hours of payment confirmation.",
-    "title": "What happens after I pay?"
-  },
-  {
-    "description": "Please contact our support team to discuss payment arrangements and possible extensions.",
-    "title": "Can I get an extension?"
+const FAQTab = () => {
+  const { data, loading, error, refreshData } = useFAQData();
+
+  if (loading) {
+    return (
+      <ScreenLayout>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.PRIMARY_BLUE} />
+          <Text style={styles.loadingText}>Loading FAQ...</Text>
+        </View>
+      </ScreenLayout>
+    );
   }
-]
-const FAQTab = () => (
-	<ScreenLayout>
-		<FlatList 
-			data={faqContent}
-			style={styles.listStyle}
-			contentContainerStyle={styles.listContent}
-			showsVerticalScrollIndicator={false}
-			keyExtractor={(_item, index) => `faq-${index}`}
-			renderItem={({ item }) => (
-				<Accordion title={item.title}>
-					<Text style={styles.faqTextStyle}>{item.description}</Text>
-				</Accordion>
-			)}
-		/>
-	</ScreenLayout>
-)
+
+  return (
+    <ScreenLayout>
+      {error && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <Text style={styles.retryText} onPress={refreshData}>
+            Tap to retry
+          </Text>
+        </View>
+      )}
+
+      <FlatList 
+        data={data}
+        style={styles.listStyle}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <Accordion title={item.title}>
+            <Text style={styles.faqTextStyle}>{item.description}</Text>
+          </Accordion>
+        )}
+        refreshing={loading}
+        onRefresh={refreshData}
+      />
+    </ScreenLayout>
+  );
+};
+
 const styles = StyleSheet.create({
-	listStyle: { flex: 1 },
-	listContent: { rowGap: Metrics.verticalScale(8) }, 
-	faqTextStyle: Fonts.Regular(Fonts.Size.small)
-})
+  listStyle: { flex: 1 },
+  listContent: { rowGap: Metrics.verticalScale(8) }, 
+  faqTextStyle: Fonts.Regular(Fonts.Size.small),
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    ...Fonts.Regular(Fonts.Size.medium),
+    marginTop: Metrics.verticalScale(16),
+    color: Colors.GRAY,
+  },
+  errorContainer: {
+    paddingHorizontal: Metrics.scale(20),
+    paddingVertical: Metrics.verticalScale(12),
+    backgroundColor: Colors.RED + '20',
+    marginBottom: Metrics.verticalScale(8),
+  },
+  errorText: {
+    ...Fonts.Regular(Fonts.Size.small),
+    textAlign: 'center',
+    color: Colors.RED,
+    marginBottom: Metrics.verticalScale(4),
+  },
+  retryText: {
+    ...Fonts.Medium(Fonts.Size.small),
+    color: Colors.PRIMARY_BLUE,
+    textDecorationLine: 'underline',
+    textAlign: 'center',
+  },
+});
 
 export default FAQTab;

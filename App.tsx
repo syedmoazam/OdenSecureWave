@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import AppNavigator from "@/navigators/AppNavigator";
 import {appMainContainer} from "@/themes/AppStyles";
 import {SafeAreaProvider} from "react-native-safe-area-context";
-import { useNotifications } from '@/hooks';
+import { useNotifications } from '@/hooks/useNotifications';
 import NotificationBanner from '@/components/NotificationBanner';
 
 function App() {
