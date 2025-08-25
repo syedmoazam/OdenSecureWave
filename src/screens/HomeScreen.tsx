@@ -1,4 +1,4 @@
-import {FlatList, StyleSheet, Text, View, Alert} from 'react-native';
+import {FlatList, StyleSheet, Text, View, Alert, NativeMethods, NativeModules, TouchableOpacity} from 'react-native';
 import SvgIcon from "@/components/SvgIcon.tsx";
 import Icons from "@/constants/icons.ts";
 import Metrics from "@/utils/Metrics.ts";
@@ -8,11 +8,10 @@ import AppButton from "@/components/AppButton.tsx";
 import BottomSheet, {BottomSheetRef} from "@/components/BottomSheet.tsx";
 import {useRef, useState, useEffect, useCallback} from "react";
 import ScreenLayout from "@/layouts/ScreenLayout.tsx";
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import routes from '@/constants/routes';
-import DeviceAdminManager from '@/services/DeviceAdminManager';
 import { useCompanyData } from '@/hooks/useCompanyData';
-import { CompanyItem } from '@/types/company';
+import { useDeviceData } from '@/hooks/useDeviceData';
+import DeviceAdminManager from '@/services/DeviceAdminManager';
+
 
 interface ICompany {
   id: string;
@@ -21,64 +20,21 @@ interface ICompany {
 }
 
 export function HomeScreen() {
+  const { 
+    isMonitoringEnabled, 
+    isSettingUp, 
+    setupDevice, 
+    deviceData, 
+    isServiceEnabled,
+    isServiceConfigured 
+  } = useDeviceData();
   const [company, setCompany] = useState<ICompany | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [isCameraDisabled, setIsCameraDisabled] = useState<boolean>(false);
-  const [isAdminEnabled, setIsAdminEnabled] = useState<boolean>(false);
   const bottomSheetRef = useRef<BottomSheetRef>(null);
-  const navigation = useNavigation();
-  const deviceAdmin = DeviceAdminManager.getInstance();
-  
-  // Use the company data hook
-  const { data: companyData, loading: companyLoading, error: companyError, refreshData: refreshCompanyData } = useCompanyData();
-
-  useEffect(() => {
-    checkStatuses();
-  }, []);
-
-  // Refresh status when screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      console.log('HomeScreen focused - refreshing status');
-      checkStatuses();
-    }, [])
-  );
-
-  const checkStatuses = async () => {
-    try {
-      console.log('Checking device admin and camera status...');
-      
-      // Check admin status
-      const adminStatus = await deviceAdmin.isDeviceAdminEnabled();
-      console.log('Admin status:', adminStatus);
-      setIsAdminEnabled(adminStatus);
-      
-      // Only check camera status if admin is enabled
-      if (adminStatus) {
-        try {
-          const cameraStatus = await deviceAdmin.isCameraDisabled();
-          console.log('Camera disabled:', cameraStatus);
-          setIsCameraDisabled(cameraStatus);
-        } catch (cameraError) {
-          console.warn('Could not check camera status:', cameraError);
-          // Set to false if we can't check (likely permission issue)
-          setIsCameraDisabled(false);
-        }
-      } else {
-        // Reset camera status if admin is disabled
-        setIsCameraDisabled(false);
-      }
-      
-    } catch (error) {
-      console.error('Error checking device admin/camera status:', error);
-      // Set safe defaults on error
-      setIsAdminEnabled(false);
-      setIsCameraDisabled(false);
-    }
-  };
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const deviceAdminManager = DeviceAdminManager.getInstance();
 
   const onPressBranchCard = () => {
-    if (bottomSheetRef.current) {
+    if (bottomSheetRef.current && !isMonitoringEnabled && !isServiceEnabled) {
       bottomSheetRef.current.open();
     }
   }
@@ -90,90 +46,210 @@ export function HomeScreen() {
     }
   }
 
-  const onPressDisableCamera = async () => {
-    try {
-      setLoading(true);
-      
-      // Check if device admin is enabled first
-      const isAdminEnabled = await deviceAdmin.isDeviceAdminEnabled();
-      if (!isAdminEnabled) {
-        Alert.alert(
-          'Device Admin Required',
-          'Please enable device admin first to control camera access.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Go to Device Admin', onPress: onPressDeviceAdmin },
-          ]
-        );
-        return;
-      }
+  const handleStartSetup = async () => {
+    if (!company || isMonitoringEnabled || isServiceEnabled) {
+      return;
+    }
 
-      // Check current camera status
-      const currentCameraStatus = await deviceAdmin.isCameraDisabled();
+    try {
+      await setupDevice(company);
+
+      Alert.alert(
+        'Setup Complete',
+        'Device has been successfully registered for monitoring. Background service has been enabled.',
+        [{ text: 'OK' }]
+      );
+
+    } catch (error: any) {
+      console.error('Error during device setup:', error);
+      Alert.alert(
+        'Setup Failed',
+        error.message || 'Failed to setup device monitoring. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
+  }
+
+  // Debug methods for testing WorkManager
+  const debugWorkManager = async () => {
+    try {
+      console.log('🔍 Starting WorkManager Debug...');
       
-      // Toggle camera status
-      const newStatus = !currentCameraStatus;
+      // Test 1: Check if DeviceAdminModule is available
+      console.log('DeviceAdminModule available:', !!DeviceAdminManager);
       
-      try {
-        const result = await deviceAdmin.setCameraDisabled(newStatus);
-        
-        // Wait a bit for the system to process the change
-        await new Promise<void>(resolve => setTimeout(() => resolve(), 500));
-        
-        // Refresh statuses to ensure UI is updated
-        await checkStatuses();
-        
-        Alert.alert(
-          'Success', 
-          `Camera ${newStatus ? 'disabled' : 'enabled'} successfully`
-        );
-        
-      } catch (error: any) {
-        console.error('Camera control error:', error);
-        
-        if (error.code === 'PERMISSION_ERROR') {
-          Alert.alert(
-            'Insufficient Privileges', 
-            'Camera control requires Device Owner or Profile Owner privileges.\n\nCurrently detected:\n• Regular Device Admin: ✅\n• Device Owner: ❌\n• Profile Owner: ❌\n\nThis device appears to have another Device Owner app installed, preventing camera control.',
-            [
-              { text: 'OK', style: 'default' },
-              { 
-                text: 'Check Status', 
-                onPress: () => {
-                  // Navigate to device admin screen to see more details
-                  onPressDeviceAdmin();
-                }
-              }
-            ]
-          );
-        } else {
-          Alert.alert('Error', error.message || 'Failed to control camera');
-        }
-        
-        // Refresh UI even on error to show correct status
-        await checkStatuses();
-      }
+      // Test 2: Check current service status
+      const serviceStatus = await deviceAdminManager.isPeriodicServiceEnabled();
+      console.log('Service Status:', serviceStatus);
+      
+      // Test 3: Check device admin status
+      const isDeviceAdmin = await deviceAdminManager.isDeviceAdminEnabled();
+      console.log('Device Admin Enabled:', isDeviceAdmin);
+      
+      // Test 4: Check device owner status
+      const isDeviceOwner = await deviceAdminManager.isDeviceOwner();
+      console.log('Is Device Owner:', isDeviceOwner);
+      
+      // Test 5: Get detailed privilege status
+      const privilegeStatus = await deviceAdminManager.getServicePrivilegeStatus();
+      console.log('Privilege Status:', privilegeStatus);
+      
+      const debugData = {
+        serviceStatus,
+        isDeviceAdmin,
+        isDeviceOwner,
+        privilegeStatus,
+        timestamp: new Date().toLocaleString()
+      };
+      
+      setDebugInfo(debugData);
+      
+      Alert.alert('Debug Complete', 'Check console logs for detailed information');
       
     } catch (error: any) {
-      console.error('General camera control error:', error);
-      Alert.alert('Error', error.message || 'Failed to control camera');
-      // Refresh UI even on error
-      await checkStatuses();
-    } finally {
-      setLoading(false);
+      console.error('Debug Error:', error);
+      Alert.alert('Debug Failed', error.message || 'Unknown error occurred');
     }
   };
 
-  const onPressDeviceAdmin = () => {
-    navigation.navigate(routes.APP_STACK.DEVICE_ADMIN as never);
-  }
+  const testStartService = async () => {
+    try {
+      console.log('🚀 Testing Service Start...');
+      const result = await deviceAdminManager.startPeriodicService();
+      console.log('Start Service Result:', result);
+      Alert.alert('Service Start', result);
+    } catch (error: any) {
+      console.error('Start Service Error:', error);
+      Alert.alert('Start Service Failed', error.message || 'Unknown error');
+    }
+  };
+
+  const testStopService = async () => {
+    try {
+      console.log('⏹️ Testing Service Stop...');
+      const result = await deviceAdminManager.stopPeriodicService();
+      console.log('Stop Service Result:', result);
+      Alert.alert('Service Stop', result);
+    } catch (error: any) {
+      console.error('Stop Service Error:', error);
+      Alert.alert('Stop Service Failed', error.message || 'Unknown error');
+    }
+  };
+
+  const testInitializeService = async () => {
+    try {
+      console.log('🔄 Testing Service Initialize...');
+      const result = await deviceAdminManager.initializeServiceOnStartup();
+      console.log('Initialize Service Result:', result);
+      Alert.alert('Service Initialize', result);
+    } catch (error: any) {
+      console.error('Initialize Service Error:', error);
+      Alert.alert('Initialize Service Failed', error.message || 'Unknown error');
+    }
+  };
+
+  const testBootFirebaseCheck = async () => {
+    try {
+      console.log('🔄 Testing Boot Firebase Check...');
+      
+      const result = await deviceAdminManager.testBootFirebaseCheck();
+      console.log('Boot Firebase Check Result:', result);
+      Alert.alert('Boot Firebase Check', result);
+    } catch (error: any) {
+      console.error('Boot Firebase Check Error:', error);
+      Alert.alert('Boot Firebase Check Failed', error.message || 'Unknown error');
+    }
+  };
+
+  const simulateBootCompleted = async () => {
+    try {
+      console.log('🔄 Simulating Boot Completed...');
+      
+      const result = await deviceAdminManager.simulateBootCompleted();
+      console.log('Simulate Boot Result:', result);
+      Alert.alert('Boot Simulation', result);
+    } catch (error: any) {
+      console.error('Simulate Boot Error:', error);
+      Alert.alert('Boot Simulation Failed', error.message || 'Unknown error');
+    }
+  };
+
+  useEffect(() => {
+    if (deviceData?.company) {
+      setCompany(deviceData.company)
+    }
+  }, [deviceData])
+
+  // Determine what to show based on service and monitoring status
+  const showSetup = !isServiceEnabled && !isMonitoringEnabled;
+  const showMonitoring = isServiceEnabled && isMonitoringEnabled;
+  const showCompanySelection = !company && showSetup;
 
   return (
     <ScreenLayout>
       <View style={styles.container}>
-        {company ? (
+        {showMonitoring ? (
+          // Show monitoring active status
+          <View style={[styles.card, styles.lightGreenBg]}>
+            <View style={styles.iconTextContainer}>
+              <View style={styles.iconContainer}>
+                <SvgIcon
+                  color={Colors.GREEN}
+                  name={Icons.CIRCLE_CHECK}
+                  size={Metrics.icons.small}
+                />
+              </View>
+              <Text style={styles.greenMediumLabel}>Monitoring Active</Text>
+            </View>
+            <Text style={styles.blueText}>
+              Your device is being monitored and the background service is running. 
+              {company && ` Connected to ${company.name}-${company.branch}.`}
+            </Text>
+          </View>
+        ) : showCompanySelection ? (
+          // Show company selection flow
           <>
-            {/* Device Setup */}
+            <View style={[styles.card, styles.lightOrangeBg]}>
+              <View style={styles.iconTextContainer}>
+                <View style={styles.iconContainer}>
+                  <SvgIcon
+                    color={Colors.ORANGE}
+                    name={Icons.BUILDING}
+                    size={Metrics.icons.small}
+                  />
+                </View>
+                <Text style={styles.orangeBoldLabel}>Select Your Company</Text>
+              </View>
+              <Text style={styles.orangeText}>
+                Please select your company and branch to begin the device setup process.
+              </Text>
+            </View>
+            <AppButton
+              onPress={onPressBranchCard}
+              style={[styles.card, styles.lightBlueBg]}
+            >
+              <View style={styles.iconTextContainer}>
+                <View style={styles.iconContainer}>
+                  <SvgIcon
+                    color={Colors.BLUE}
+                    size={Metrics.icons.small}
+                    name={Icons.BRIEFCASE}
+                  />
+                </View>
+                <Text style={styles.blueMediumLabel}>Select Company & Branch</Text>
+                <AppButton style={styles.branchIconButton}>
+                  <SvgIcon
+                    color={Colors.BLUE}
+                    size={Metrics.icons.tiny}
+                    name={Icons.CHEVRON_RIGHT}
+                  />
+                </AppButton>
+              </View>
+            </AppButton>
+          </>
+        ) : company && showSetup ? (
+          // Show setup flow when company is selected but service not enabled
+          <>
             <View style={[styles.card, styles.lightBlueBg]}>
               <View style={styles.iconTextContainer}>
                 <View style={styles.iconContainer}>
@@ -211,7 +287,6 @@ export function HomeScreen() {
                 </AppButton>
               </View>
             </AppButton>
-            {/* Device Setup Initiator */}
             <View style={[styles.card, styles.lightPurpleBg]}>
               <View style={styles.iconTextContainer}>
                 <View style={styles.iconContainer}>
@@ -224,138 +299,87 @@ export function HomeScreen() {
                 <Text style={styles.purpleBoldLabel}>Device Setup</Text>
               </View>
               <Text style={styles.purpleText}>
-                Complete the device setup to enable security features and management controls.
+                Complete the device setup to enable security features and management controls.{"\n\n"}
               </Text>
-              <AppButton style={styles.setupBtn}>
-                <Text style={styles.whiteMediumText}>Start Setup</Text>
+              <AppButton 
+                disabled={isSettingUp} 
+                style={styles.setupBtn}
+                onPress={handleStartSetup}
+              >
+                <Text style={styles.whiteMediumText}>
+                  {isSettingUp ? 'Setting Up...' : 'Start Setup'}
+                </Text>
               </AppButton>
             </View>
-            
-          {/* Camera Control */}
-          <View style={[styles.card, styles.lightPurpleBg]}>
+          </>
+        ) : (
+          // Fallback: show basic status
+          <View style={[styles.card, styles.lightBlueBg]}>
             <View style={styles.iconTextContainer}>
               <View style={styles.iconContainer}>
                 <SvgIcon
+                  color={Colors.BLUE}
                   name={Icons.SECURITY}
-                  color={Colors.PURPLE}
                   size={Metrics.icons.small}
                 />
               </View>
-              <Text style={styles.purpleBoldLabel}>Camera Control</Text>
+              <Text style={styles.blueBoldLabel}>Device Status</Text>
             </View>
-            <Text style={styles.purpleText}>
-              Camera Status: {isCameraDisabled ? '🚫 Disabled' : '📷 Enabled'}
+            <Text style={styles.blueText}>
+              Service Enabled: {isServiceEnabled ? 'Yes' : 'No'}{'\n'}
+              Service Configured: {isServiceConfigured ? 'Yes' : 'No'}{'\n'}
+              Monitoring: {isMonitoringEnabled ? 'Active' : 'Inactive'}
             </Text>
-            <Text style={styles.purpleText}>
-              Admin Status: {isAdminEnabled ? '✅ Enabled' : '❌ Disabled'}
-            </Text>
-            <View style={styles.buttonContainer}>
-              <AppButton 
-                style={[styles.controlBtn, { backgroundColor: isCameraDisabled ? Colors.GREEN : "#FF6B6B" }]}
-                onPress={onPressDisableCamera}
-                disabled={loading}
-              >
-                <Text style={styles.whiteMediumText}>
-                  {loading ? 'Processing...' : (isCameraDisabled ? 'Enable Camera' : 'Disable Camera')}
-                </Text>
-              </AppButton>
-              <AppButton 
-                style={[styles.controlBtn, { backgroundColor: Colors.BLUE }]}
-                onPress={onPressDeviceAdmin}
-              >
-                <Text style={styles.whiteMediumText}>Device Admin</Text>
-              </AppButton>
-            </View>
           </View>
-        </>
-        ) : (
-          <>
-            {/* Company Selection */}
-            <View style={[styles.card, styles.lightOrangeBg]}>
-              <View style={styles.iconTextContainer}>
-                <View style={styles.iconContainer}>
-                  <SvgIcon
-                    color={Colors.ORANGE}
-                    name={Icons.BUILDING}
-                    size={Metrics.icons.small}
-                  />
-                </View>
-                <Text style={styles.orangeBoldLabel}>Select Your Company</Text>
-              </View>
-              <Text style={styles.orangeText}>
-                Please select your company and branch to begin the device setup process.
+        )}
+
+        {/* Debug Panel - Remove this in production */}
+        <View style={[styles.card, styles.debugPanel]}>
+          <Text style={styles.debugTitle}>🔧 WorkManager Debug Panel</Text>
+          
+          <View style={styles.debugButtonContainer}>
+            <TouchableOpacity style={styles.debugButton} onPress={debugWorkManager}>
+              <Text style={styles.debugButtonText}>Debug Status</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.debugButton} onPress={testStartService}>
+              <Text style={styles.debugButtonText}>Start Service</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.debugButton} onPress={testStopService}>
+              <Text style={styles.debugButtonText}>Stop Service</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.debugButton} onPress={testInitializeService}>
+              <Text style={styles.debugButtonText}>Initialize</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.debugButton} onPress={testBootFirebaseCheck}>
+              <Text style={styles.debugButtonText}>Test Boot Check</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.debugButton} onPress={simulateBootCompleted}>
+              <Text style={styles.debugButtonText}>Simulate Boot</Text>
+            </TouchableOpacity>
+          </View>
+          
+          {debugInfo && (
+            <View style={styles.debugInfo}>
+              <Text style={styles.debugInfoTitle}>Last Debug Result:</Text>
+              <Text style={styles.debugInfoText}>
+                Service Enabled: {debugInfo.serviceStatus?.enabled ? '✅' : '❌'}{'\n'}
+                Work Scheduled: {debugInfo.serviceStatus?.workScheduled ? '✅' : '❌'}{'\n'}
+                Device Admin: {debugInfo.isDeviceAdmin ? '✅' : '❌'}{'\n'}
+                Device Owner: {debugInfo.isDeviceOwner ? '✅' : '❌'}{'\n'}
+                Time: {debugInfo.timestamp}
               </Text>
             </View>
-            {/* Branch Card */}
-            <AppButton
-              onPress={onPressBranchCard}
-              style={[styles.card, styles.lightBlueBg]}
-            >
-              <View style={styles.iconTextContainer}>
-                <View style={styles.iconContainer}>
-                  <SvgIcon
-                    color={Colors.BLUE}
-                    size={Metrics.icons.small}
-                    name={Icons.BRIEFCASE}
-                  />
-                </View>
-                <Text style={styles.blueMediumLabel}>Select Company & Branch</Text>
-                <AppButton style={styles.branchIconButton}>
-                  <SvgIcon
-                    color={Colors.BLUE}
-                    size={Metrics.icons.tiny}
-                    name={Icons.CHEVRON_RIGHT}
-                  />
-                </AppButton>
-              </View>
-            </AppButton>
-          </>
-        )}
-        
-      {/* Camera Control - Always Visible */}
-      <View style={[styles.card, styles.lightPurpleBg]}>
-        <View style={styles.iconTextContainer}>
-          <View style={styles.iconContainer}>
-            <SvgIcon
-              name={Icons.SECURITY}
-              color={Colors.PURPLE}
-              size={Metrics.icons.small}
-            />
-          </View>
-          <Text style={styles.purpleBoldLabel}>Camera Control</Text>
+          )}
         </View>
-        <Text style={styles.purpleText}>
-          Camera Status: {isCameraDisabled ? '🚫 Disabled' : '📷 Enabled'}
-        </Text>
-        <Text style={styles.purpleText}>
-          Admin Status: {isAdminEnabled ? '✅ Enabled' : '❌ Disabled'}
-        </Text>
-        <View style={styles.buttonContainer}>
-          <AppButton 
-              style={[styles.controlBtn, { backgroundColor: isCameraDisabled ? Colors.GREEN : "#FF6B6B" }]}
-              onPress={onPressDisableCamera}
-              disabled={loading}
-          >
-              <Text style={styles.whiteMediumText}>
-              {loading ? 'Processing...' : (isCameraDisabled ? 'Enable Camera' : 'Disable Camera')}
-            </Text>
-          </AppButton>
-          <AppButton 
-            style={[styles.controlBtn, { backgroundColor: Colors.BLUE }]}
-            onPress={onPressDeviceAdmin}
-          >
-            <Text style={styles.whiteMediumText}>Device Admin</Text>
-            </AppButton>
-          </View>
-      </View>
-      
+
         <BottomSheet ref={bottomSheetRef}>
           <CompanySelector 
             onSelectCompany={onSelectCompany}
-            companyData={companyData}
-            loading={companyLoading}
-            error={companyError}
-            onRefresh={refreshCompanyData}
           />
         </BottomSheet>
       </View>
@@ -365,19 +389,12 @@ export function HomeScreen() {
 
 interface ICompanySelectorProps {
   onSelectCompany: (company: ICompany) => void;
-  companyData: CompanyItem[];
-  loading: boolean;
-  error: string | null;
-  onRefresh: () => void;
 }
 
 const CompanySelector = ({ 
   onSelectCompany, 
-  companyData, 
-  loading, 
-  error, 
-  onRefresh 
 }: ICompanySelectorProps) => {
+  const { data: companyData, loading, error, refreshData } = useCompanyData();
   return (
     <View style={styles.container}>
       <View style={styles.iconTextContainer}>
@@ -393,7 +410,7 @@ const CompanySelector = ({
       {error && (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
-          <Text style={styles.retryText} onPress={onRefresh}>
+          <Text style={styles.retryText} onPress={refreshData}>
             Tap to retry
           </Text>
         </View>
@@ -419,7 +436,7 @@ const CompanySelector = ({
           </AppButton>
         )}
         refreshing={loading}
-        onRefresh={onRefresh}
+        onRefresh={refreshData}
       />
     </View>
   )
@@ -545,5 +562,54 @@ const styles = StyleSheet.create({
     color: Colors.PRIMARY_BLUE,
     textDecorationLine: 'underline',
     textAlign: 'center',
+  },
+
+  // Debug Panel Styles
+  debugPanel: {
+    backgroundColor: '#2D3748',
+    borderWidth: 2,
+    borderColor: '#4A5568',
+  },
+  debugTitle: {
+    ...Fonts.Bold(Fonts.Size.normal),
+    color: '#E2E8F0',
+    marginBottom: Metrics.verticalScale(12),
+    textAlign: 'center',
+  },
+  debugButtonContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Metrics.scale(8),
+    justifyContent: 'space-between',
+    marginBottom: Metrics.verticalScale(12),
+  },
+  debugButton: {
+    backgroundColor: '#4C51BF',
+    paddingHorizontal: Metrics.scale(12),
+    paddingVertical: Metrics.verticalScale(8),
+    borderRadius: Metrics.scale(6),
+    flex: 1,
+    minWidth: '45%',
+    alignItems: 'center',
+  },
+  debugButtonText: {
+    ...Fonts.Medium(Fonts.Size.xSmall),
+    color: 'white',
+  },
+  debugInfo: {
+    backgroundColor: '#1A202C',
+    padding: Metrics.scale(12),
+    borderRadius: Metrics.scale(8),
+    marginTop: Metrics.verticalScale(8),
+  },
+  debugInfoTitle: {
+    ...Fonts.Bold(Fonts.Size.small),
+    color: '#63B3ED',
+    marginBottom: Metrics.verticalScale(8),
+  },
+  debugInfoText: {
+    ...Fonts.Regular(Fonts.Size.xSmall),
+    color: '#E2E8F0',
+    lineHeight: 18,
   },
 })

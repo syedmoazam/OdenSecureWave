@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import DatabaseService from '@/services/databaseService.ts';
-import { FAQItem, FAQState } from '@/types/faq';
+import { FAQItem } from '@/types/faq';
+import { QUERY_KEYS, QUERY_CONFIG } from '@/constants/storageKeys';
 
 // Fallback mock data
 const fallbackFAQData: FAQItem[] = [
@@ -26,56 +27,40 @@ const fallbackFAQData: FAQItem[] = [
   }
 ];
 
+// Helper function to fetch FAQ data
+const fetchFAQData = async (): Promise<FAQItem[]> => {
+  const databaseService = DatabaseService.getInstance();
+  const data = await databaseService.getFAQData();
+  return data.length > 0 ? data : fallbackFAQData;
+};
+
 export const useFAQData = () => {
-  const [state, setState] = useState<FAQState>({
-    data: [],
-    loading: true,
-    error: null
+  const {
+    data = fallbackFAQData,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: QUERY_KEYS.FAQ_DATA,
+    queryFn: fetchFAQData,
+    staleTime: QUERY_CONFIG.STALE_TIME.LONG,
+    gcTime: QUERY_CONFIG.CACHE_TIME.LONG,
+    retry: QUERY_CONFIG.RETRY.DEFAULT,
+    // Always provide fallback data
+    placeholderData: fallbackFAQData,
+    // Handle network errors gracefully
+    retryOnMount: true,
+    refetchOnReconnect: true,
   });
 
-  const databaseService = DatabaseService.getInstance();
-
-  const fetchFAQData = async () => {
-    try {
-      // Bug: When data is loaded for the first time, it returns connection as false
-      // const isConnected = await databaseService.isConnected();
-      // if (!isConnected) {
-      //   setState({
-      //     data: fallbackFAQData,
-      //     loading: false,
-      //     error: 'No internet connection. Showing cached version.'
-      //   });
-      //   return;
-      // }
-      setState(prev => ({ ...prev, loading: true, error: null }));
-      
-      const data = await databaseService.getFAQData();
-      
-      setState({
-        data: data.length > 0 ? data : fallbackFAQData,
-        loading: false,
-        error: null
-      });
-    } catch (error) {
-      console.error('Error fetching FAQ data:', error);
-      setState({
-        data: fallbackFAQData,
-        loading: false,
-        error: 'Failed to load FAQ data. Showing cached version.'
-      });
-    }
-  };
-
-  useEffect(() => {
-    fetchFAQData();
-  }, []);
-
   const refreshData = () => {
-    fetchFAQData();
+    refetch();
   };
 
   return {
-    ...state,
-    refreshData
+    data,
+    loading: isLoading,
+    error: error?.message || null,
+    refreshData,
   };
 }; 

@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.DEVICE_POWER" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_CAMERA" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     
     <!-- Android 12+ Device Owner Provisioning Permissions -->
     <uses-permission android:name="android.permission.MANAGE_DEVICE_POLICY_SYSTEM_UPDATES" />
@@ -52,6 +53,13 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    
+    <!-- Location permissions for Device Owner location access -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    
 
     <application
       android:name=".MainApplication"
@@ -117,6 +125,16 @@
         </intent-filter>
       </receiver>
       
+      <!-- Boot Status Checker Receiver (Alternative to boot receiver when AutoStart is limited) -->
+      <receiver
+        android:name=".BootStatusReceiver"
+        android:enabled="true"
+        android:exported="false">
+        <intent-filter>
+          <action android:name="com.odensecurewave.BOOT_STATUS_CHECK" />
+        </intent-filter>
+      </receiver>
+      
       <!-- Firebase Messaging Service -->
       <service
         android:name="io.invertase.firebase.messaging.ReactNativeFirebaseMessagingService"
@@ -141,5 +159,16 @@
       <meta-data
         android:name="firebase_analytics_collection_enabled"
         android:value="false" />
+      <service
+        android:name=".FirebaseListenerService"
+        android:exported="false"
+      />
+      <service
+        android:name=".FirebaseHeadlessService"
+        android:permission="android.permission.BIND_JOB_SERVICE"
+        android:exported="false"
+      />
+      
+
     </application>
 </manifest>

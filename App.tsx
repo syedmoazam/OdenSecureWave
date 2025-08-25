@@ -4,35 +4,43 @@ import {appMainContainer} from "@/themes/AppStyles";
 import {SafeAreaProvider} from "react-native-safe-area-context";
 import { useNotifications } from '@/hooks/useNotifications';
 import NotificationBanner from '@/components/NotificationBanner';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QUERY_CONFIG } from '@/constants/storageKeys';
+import { DeviceDataProvider } from '@/contexts/DeviceDataContext';
+
+// Create a client
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: QUERY_CONFIG.STALE_TIME.MEDIUM,
+      gcTime: QUERY_CONFIG.CACHE_TIME.MEDIUM, // Previously cacheTime in v4
+      retry: QUERY_CONFIG.RETRY.DEFAULT,
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+      refetchOnReconnect: true,
+    },
+    mutations: {
+      retry: QUERY_CONFIG.RETRY.DEFAULT,
+    },
+  },
+});
 
 function App() {
-  const { isInitialized, fcmToken, lastNotification } = useNotifications();
-
-  useEffect(() => {
-    if (isInitialized && fcmToken) {
-      console.log('Firebase messaging initialized with token:', fcmToken);
-      // Here you can send the token to your backend server
-    }
-  }, [isInitialized, fcmToken]);
-
-  const handleNotificationPress = (notification: any) => {
-    console.log('Notification pressed:', notification);
-    // Handle navigation based on notification type
-  };
-
-  const handleNotificationDismiss = (notification: any) => {
-    console.log('Notification dismissed:', notification);
-  };
+  useNotifications();
 
   return (
-    <SafeAreaProvider style={appMainContainer}>
-      <AppNavigator />
-      <NotificationBanner
-        notification={lastNotification}
-        onPress={handleNotificationPress}
-        onDismiss={handleNotificationDismiss}
-      />
-    </SafeAreaProvider>
+    <QueryClientProvider client={queryClient}>
+      <DeviceDataProvider>
+        <SafeAreaProvider style={appMainContainer}>
+          <AppNavigator />
+          {/* <NotificationBanner
+            notification={lastNotification}
+            onPress={handleNotificationPress}
+            onDismiss={handleNotificationDismiss}
+          /> */}
+        </SafeAreaProvider>
+      </DeviceDataProvider>
+    </QueryClientProvider>
   );
 }
 

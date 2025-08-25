@@ -38,6 +38,13 @@ class MainApplication : Application(), ReactApplication {
     // Initialize the error logger to ensure log file exists
     ErrorLogger.initialize(this)
     
+    // Initialize the WorkManager periodic service if it was previously enabled
+    try {
+      WorkManagerServiceManager.initializeService(this)
+    } catch (e: Exception) {
+      ErrorLogger.logError(this, "MainApplication", "onCreate", e)
+    }
+    
     loadReactNative(this)
   }
 }

@@ -1,5 +1,15 @@
 import { NativeModules, Platform } from 'react-native';
 
+interface DeviceInfo {
+  manufacturer: string;
+  model: string;
+  brand: string;
+  device: string;
+  product: string;
+  androidVersion: string;
+  apiLevel: number;
+}
+
 interface DeviceAdminModuleInterface {
   isDeviceAdminEnabled(): Promise<boolean>;
   enableDeviceAdmin(): Promise<string>;
@@ -16,6 +26,20 @@ interface DeviceAdminModuleInterface {
   isDeviceOwner(): Promise<boolean>;
   isProfileOwner(): Promise<boolean>;
   testBridge(): Promise<string>;
+  getDeviceIMEI(): Promise<string>;
+  getDeviceInfo(): Promise<DeviceInfo>;
+  lockApp(): Promise<string>;
+  unlockApp(): Promise<string>;
+  launchApp(): Promise<string>;
+  closeApp(): Promise<string>;
+  startPeriodicService(): Promise<string>;
+  stopPeriodicService(): Promise<string>;
+  isPeriodicServiceEnabled(): Promise<{enabled: boolean; workScheduled: boolean}>;
+  configureDeviceOwnerPrivileges(): Promise<string>;
+  getServicePrivilegeStatus(): Promise<any>;
+  initializeServiceOnStartup(): Promise<string>;
+  testBootFirebaseCheck(): Promise<string>;
+  simulateBootCompleted(): Promise<string>;
 }
 
 const { DeviceAdminModule } = NativeModules;
@@ -152,6 +176,271 @@ class DeviceAdminManager {
       throw new Error('Device Admin is only available on Android');
     }
     return DeviceAdminModule.testBridge();
+  }
+
+         /**
+   * Get device IMEI
+   */
+    public async getDeviceIMEI(): Promise<string> {
+      try {
+        if (Platform.OS !== 'android') {
+          throw new Error('IMEI is only available on Android devices');
+        }
+        
+        const imei = await DeviceAdminModule.getDeviceIMEI();
+        return imei;
+      } catch (error) {
+        console.error('Error getting device IMEI:', error);
+        throw error;
+      }
+    }
+
+  /**
+   * Get device information (manufacturer, model, etc.)
+   */
+  public async getDeviceInfo(): Promise<DeviceInfo> {
+    try {
+      if (Platform.OS !== 'android') {
+        throw new Error('Device info is only available on Android devices');
+      }
+      
+      const deviceInfo = await DeviceAdminModule.getDeviceInfo();
+      return deviceInfo;
+    } catch (error) {
+      console.error('Error getting device info:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Enable kiosk mode - locks device to only this app
+   */
+  public async lockApp(): Promise<string> {
+    try {
+      if (Platform.OS !== 'android') {
+        throw new Error('Kiosk mode is only available on Android devices');
+      }
+      
+      const result = await DeviceAdminModule.lockApp();
+      return result;
+    } catch (error) {
+      console.error('Error enabling kiosk mode:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Disable kiosk mode - allows normal device usage
+   */
+  public async unlockApp(): Promise<string> {
+    try {
+      if (Platform.OS !== 'android') {
+        throw new Error('Kiosk mode is only available on Android devices');
+      }
+      
+      const result = await DeviceAdminModule.unlockApp();
+      return result;
+    } catch (error) {
+      console.error('Error disabling kiosk mode:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Launch/restart the application
+   */
+  public async launchApp(): Promise<string> {
+    try {
+      if (Platform.OS !== 'android') {
+        throw new Error('App launch control is only available on Android devices');
+      }
+      
+      const result = await DeviceAdminModule.launchApp();
+      return result;
+    } catch (error) {
+      console.error('Error launching app:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Close/terminate the application
+   */
+  public async closeApp(): Promise<string> {
+    try {
+      if (Platform.OS !== 'android') {
+        throw new Error('App close control is only available on Android devices');
+      }
+      
+      const result = await DeviceAdminModule.closeApp();
+      return result;
+    } catch (error) {
+      console.error('Error closing app:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Start the WorkManager periodic service
+   */
+  public async startPeriodicService(): Promise<string> {
+    try {
+      if (Platform.OS !== 'android') {
+        throw new Error('Periodic service is only available on Android devices');
+      }
+      
+      const result = await DeviceAdminModule.startPeriodicService();
+      return result;
+    } catch (error) {
+      console.error('Error starting periodic service:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Stop the WorkManager periodic service
+   */
+  public async stopPeriodicService(): Promise<string> {
+    try {
+      if (Platform.OS !== 'android') {
+        throw new Error('Periodic service is only available on Android devices');
+      }
+      
+      const result = await DeviceAdminModule.stopPeriodicService();
+      return result;
+    } catch (error) {
+      console.error('Error stopping periodic service:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if periodic service is enabled and scheduled
+   */
+  public async isPeriodicServiceEnabled(): Promise<{enabled: boolean; workScheduled: boolean}> {
+    try {
+      if (Platform.OS !== 'android') {
+        throw new Error('Periodic service is only available on Android devices');
+      }
+      
+      const result = await DeviceAdminModule.isPeriodicServiceEnabled();
+      return result;
+    } catch (error) {
+      console.error('Error checking periodic service status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Configure Device Owner privileges for better service reliability
+   */
+  public async configureDeviceOwnerPrivileges(): Promise<string> {
+    try {
+      if (Platform.OS !== 'android') {
+        throw new Error('Device Owner privileges are only available on Android devices');
+      }
+      
+      const result = await DeviceAdminModule.configureDeviceOwnerPrivileges();
+      return result;
+    } catch (error) {
+      console.error('Error configuring Device Owner privileges:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get comprehensive service and privilege status
+   */
+  public async getServicePrivilegeStatus(): Promise<any> {
+    try {
+      if (Platform.OS !== 'android') {
+        throw new Error('Service status is only available on Android devices');
+      }
+      
+      const result = await DeviceAdminModule.getServicePrivilegeStatus();
+      return result;
+    } catch (error) {
+      console.error('Error getting service privilege status:', error);
+      throw error;
+    }
+  }
+
+  public async debugServiceStatus() {
+    try {
+      console.log('=== DEBUGGING SERVICE STATUS ===');
+      
+      // Check if DeviceAdminModule is available
+      console.log('DeviceAdminModule available:', !!DeviceAdminModule);
+      
+      // Check current service status
+      const status = await DeviceAdminModule.isPeriodicServiceEnabled();
+      console.log('Current service status:', status);
+      
+      // Try to start service manually
+      console.log('Attempting to start service...');
+      await DeviceAdminModule.startPeriodicService();
+      console.log('Service start command completed');
+      
+      // Check status again
+      const newStatus = await DeviceAdminModule.isPeriodicServiceEnabled();
+      console.log('New service status:', newStatus);
+      
+    } catch (error) {
+      console.error('Service debug error:', error);
+    }
+  };
+  
+  // Call this function when you want to debug
+  // debugServiceStatus();
+  /**
+   * Initialize service on startup (for debugging)
+   */
+  public async initializeServiceOnStartup(): Promise<string> {
+    try {
+      if (Platform.OS !== 'android') {
+        throw new Error('Service initialization is only available on Android devices');
+      }
+      
+      const result = await DeviceAdminModule.initializeServiceOnStartup();
+      return result;
+    } catch (error) {
+      console.error('Error initializing service on startup:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Test boot Firebase check (for debugging)
+   */
+  public async testBootFirebaseCheck(): Promise<string> {
+    try {
+      if (Platform.OS !== 'android') {
+        throw new Error('Boot Firebase check is only available on Android devices');
+      }
+      
+      const result = await DeviceAdminModule.testBootFirebaseCheck();
+      return result;
+    } catch (error) {
+      console.error('Error testing boot Firebase check:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Simulate boot completed broadcast (for debugging)
+   */
+  public async simulateBootCompleted(): Promise<string> {
+    try {
+      if (Platform.OS !== 'android') {
+        throw new Error('Boot simulation is only available on Android devices');
+      }
+      
+      const result = await DeviceAdminModule.simulateBootCompleted();
+      return result;
+    } catch (error) {
+      console.error('Error simulating boot completed:', error);
+      throw error;
+    }
   }
 }
 

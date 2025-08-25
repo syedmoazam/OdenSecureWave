@@ -1,12 +1,25 @@
 package com.odensecurewave
 
+import android.app.ActivityManager
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.os.IBinder
+import android.os.PowerManager
+import android.os.Process
+import android.telephony.TelephonyManager
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class DeviceAdminModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
@@ -456,6 +469,538 @@ class DeviceAdminModule(reactContext: ReactApplicationContext) : ReactContextBas
         } catch (e: Exception) {
             ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "canDisableDeviceAdmin", e)
             promise.reject("ERROR", "Failed to check disable capability: ${e.message}")
+        }
+    }
+
+    @ReactMethod
+    fun getDeviceIMEI(promise: Promise) {
+        try {
+            val telephonyManager = reactApplicationContext.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+            
+            // Check if we have permission
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                if (reactApplicationContext.checkSelfPermission(android.Manifest.permission.READ_PHONE_STATE) != 
+                    android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    promise.reject("ERROR", "READ_PHONE_STATE permission not granted")
+                    return
+                }
+            }
+            
+            val imei = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                telephonyManager.imei
+            } else {
+                @Suppress("DEPRECATION")
+                telephonyManager.deviceId
+            }
+            
+            if (imei.isNullOrEmpty()) {
+                promise.reject("ERROR", "Unable to get device IMEI")
+            } else {
+                Log.d("DeviceAdminModule", "Device IMEI retrieved successfully")
+                ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "getDeviceIMEI", "IMEI retrieved")
+                promise.resolve(imei)
+            }
+        } catch (e: Exception) {
+            Log.e("DeviceAdminModule", "Error getting device IMEI", e)
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "getDeviceIMEI", e)
+            promise.reject("ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun getDeviceInfo(promise: Promise) {
+        try {
+            val deviceInfo = Arguments.createMap()
+            
+            // Get manufacturer
+            val manufacturer = android.os.Build.MANUFACTURER
+            deviceInfo.putString("manufacturer", manufacturer)
+            
+            // Get model
+            val model = android.os.Build.MODEL
+            deviceInfo.putString("model", model)
+            
+            // Get additional device information
+            val brand = android.os.Build.BRAND
+            deviceInfo.putString("brand", brand)
+            
+            val device = android.os.Build.DEVICE
+            deviceInfo.putString("device", device)
+            
+            val product = android.os.Build.PRODUCT
+            deviceInfo.putString("product", product)
+            
+            val androidVersion = android.os.Build.VERSION.RELEASE
+            deviceInfo.putString("androidVersion", androidVersion)
+            
+            val apiLevel = android.os.Build.VERSION.SDK_INT
+            deviceInfo.putInt("apiLevel", apiLevel)
+            
+            Log.d("DeviceAdminModule", "Device info retrieved - Manufacturer: $manufacturer, Model: $model")
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "getDeviceInfo", "Device info retrieved", mapOf(
+                "manufacturer" to manufacturer,
+                "model" to model,
+                "brand" to brand
+            ))
+            
+            promise.resolve(deviceInfo)
+        } catch (e: Exception) {
+            Log.e("DeviceAdminModule", "Error getting device info", e)
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "getDeviceInfo", e)
+            promise.reject("ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun lockApp(promise: Promise) {
+        try {
+            Log.d("DeviceAdminModule", "lockApp called - enabling kiosk mode")
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "lockApp", "Kiosk mode lock requested")
+            
+            // Check if device admin is enabled
+            if (!devicePolicyManager.isAdminActive(adminComponentName)) {
+                Log.e("DeviceAdminModule", "Device admin not enabled - cannot enable kiosk mode")
+                ErrorLogger.logWarning(reactApplicationContext, "DeviceAdminModule", "lockApp", "Device admin not enabled")
+                promise.reject("ERROR", "Device admin not enabled")
+                return
+            }
+            
+            // Check if we have device owner privileges (required for Lock Task Mode)
+            val isDeviceOwner = try {
+                devicePolicyManager.isDeviceOwnerApp(reactApplicationContext.packageName)
+            } catch (e: Exception) {
+                ErrorLogger.logWarning(reactApplicationContext, "DeviceAdminModule", "lockApp", "Failed to check device owner status", mapOf("error" to e.message))
+                false
+            }
+            
+            if (!isDeviceOwner) {
+                Log.e("DeviceAdminModule", "App is not device owner - cannot enable Lock Task Mode")
+                ErrorLogger.logWarning(reactApplicationContext, "DeviceAdminModule", "lockApp", "Insufficient privileges for Lock Task Mode")
+                promise.reject("PERMISSION_ERROR", "App needs to be Device Owner to enable kiosk mode. Run: ./setup-device-owner.sh")
+                return
+            }
+            
+            try {
+                // Set our app as the only allowed package in Lock Task Mode
+                val packageName = reactApplicationContext.packageName
+                val allowedPackages = arrayOf(packageName)
+                
+                Log.d("DeviceAdminModule", "Setting lock task packages: [${packageName}]")
+                devicePolicyManager.setLockTaskPackages(adminComponentName, allowedPackages)
+                
+                // Start Lock Task Mode for the current activity
+                val currentActivity = reactApplicationContext.currentActivity
+                if (currentActivity != null) {
+                    Log.d("DeviceAdminModule", "Starting lock task mode for current activity")
+                    currentActivity.startLockTask()
+                    
+                    Log.d("DeviceAdminModule", "Kiosk mode enabled successfully")
+                    ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "lockApp", "Kiosk mode enabled successfully", mapOf("packageName" to packageName))
+                    promise.resolve("Kiosk mode enabled successfully. Device is now locked to this app.")
+                } else {
+                    Log.w("DeviceAdminModule", "No current activity found - Lock Task packages set but mode not started")
+                    ErrorLogger.logWarning(reactApplicationContext, "DeviceAdminModule", "lockApp", "No current activity to start lock task mode")
+                    promise.resolve("Lock Task packages configured. Please restart the app to enter kiosk mode.")
+                }
+                
+            } catch (securityException: SecurityException) {
+                Log.e("DeviceAdminModule", "Security exception when enabling kiosk mode", securityException)
+                ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "lockApp", securityException, mapOf("operation" to "setLockTaskPackages"))
+                promise.reject("PERMISSION_ERROR", "Insufficient permissions to enable kiosk mode: ${securityException.message}")
+            }
+            
+        } catch (e: Exception) {
+            Log.e("DeviceAdminModule", "Error enabling kiosk mode", e)
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "lockApp", e)
+            promise.reject("ERROR", "Failed to enable kiosk mode: ${e.message}")
+        }
+    }
+
+    @ReactMethod
+    fun unlockApp(promise: Promise) {
+        try {
+            Log.d("DeviceAdminModule", "unlockApp called - disabling kiosk mode")
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "unlockApp", "Kiosk mode unlock requested")
+            
+            // Check if device admin is enabled
+            if (!devicePolicyManager.isAdminActive(adminComponentName)) {
+                Log.e("DeviceAdminModule", "Device admin not enabled - cannot disable kiosk mode")
+                ErrorLogger.logWarning(reactApplicationContext, "DeviceAdminModule", "unlockApp", "Device admin not enabled")
+                promise.reject("ERROR", "Device admin not enabled")
+                return
+            }
+            
+            // Check if we have device owner privileges
+            val isDeviceOwner = try {
+                devicePolicyManager.isDeviceOwnerApp(reactApplicationContext.packageName)
+            } catch (e: Exception) {
+                ErrorLogger.logWarning(reactApplicationContext, "DeviceAdminModule", "unlockApp", "Failed to check device owner status", mapOf("error" to e.message))
+                false
+            }
+            
+            if (!isDeviceOwner) {
+                Log.e("DeviceAdminModule", "App is not device owner - cannot disable Lock Task Mode")
+                ErrorLogger.logWarning(reactApplicationContext, "DeviceAdminModule", "unlockApp", "Insufficient privileges for Lock Task Mode")
+                promise.reject("PERMISSION_ERROR", "App needs to be Device Owner to disable kiosk mode")
+                return
+            }
+            
+            try {
+                // Stop Lock Task Mode for the current activity
+                val currentActivity = reactApplicationContext.currentActivity
+                if (currentActivity != null) {
+                    Log.d("DeviceAdminModule", "Stopping lock task mode for current activity")
+                    currentActivity.stopLockTask()
+                }
+                
+                // Clear the Lock Task packages (allow all apps)
+                Log.d("DeviceAdminModule", "Clearing lock task packages")
+                devicePolicyManager.setLockTaskPackages(adminComponentName, arrayOf())
+                
+                Log.d("DeviceAdminModule", "Kiosk mode disabled successfully")
+                ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "unlockApp", "Kiosk mode disabled successfully")
+                promise.resolve("Kiosk mode disabled successfully. Device can now be used freely.")
+                
+            } catch (securityException: SecurityException) {
+                Log.e("DeviceAdminModule", "Security exception when disabling kiosk mode", securityException)
+                ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "unlockApp", securityException, mapOf("operation" to "clearLockTaskPackages"))
+                promise.reject("PERMISSION_ERROR", "Insufficient permissions to disable kiosk mode: ${securityException.message}")
+            }
+            
+        } catch (e: Exception) {
+            Log.e("DeviceAdminModule", "Error disabling kiosk mode", e)
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "unlockApp", e)
+            promise.reject("ERROR", "Failed to disable kiosk mode: ${e.message}")
+        }
+    }
+
+    @ReactMethod
+    fun launchApp(promise: Promise) {
+        try {
+            Log.d("DeviceAdminModule", "launchApp called - launching application")
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "launchApp", "App launch requested")
+            
+            val packageName = reactApplicationContext.packageName
+            val packageManager = reactApplicationContext.packageManager
+            
+            // Get the main launcher intent for this app
+            val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+            
+            if (launchIntent != null) {
+                // Clear any existing task stack and start fresh
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                
+                Log.d("DeviceAdminModule", "Starting app with launch intent: $packageName")
+                reactApplicationContext.startActivity(launchIntent)
+                
+                Log.d("DeviceAdminModule", "App launched successfully")
+                ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "launchApp", "App launched successfully", mapOf("packageName" to packageName))
+                promise.resolve("App launched successfully")
+                
+            } else {
+                Log.e("DeviceAdminModule", "No launch intent found for package: $packageName")
+                ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "launchApp", Exception("No launch intent found"), mapOf("packageName" to packageName))
+                promise.reject("ERROR", "Unable to find launch intent for the app")
+            }
+            
+        } catch (e: Exception) {
+            Log.e("DeviceAdminModule", "Error launching app", e)
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "launchApp", e)
+            promise.reject("ERROR", "Failed to launch app: ${e.message}")
+        }
+    }
+
+    @ReactMethod
+    fun closeApp(promise: Promise) {
+        try {
+            Log.d("DeviceAdminModule", "closeApp called - closing and removing from recent apps")
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "closeApp", "App close and removal from recent apps requested")
+            
+            val currentActivity = reactApplicationContext.currentActivity
+            val packageName = reactApplicationContext.packageName
+            
+            // Strategy 1: Use finishAndRemoveTask (API 21+) - This removes from recent apps
+            if (currentActivity != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                Log.d("DeviceAdminModule", "Using finishAndRemoveTask to remove from recent apps")
+                currentActivity.finishAndRemoveTask()
+                
+                // Give it a moment to process
+                Thread.sleep(100)
+            }
+            
+            // Strategy 2: Try to remove from recent tasks using ActivityManager (if we have permissions)
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                    val activityManager = reactApplicationContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                    val recentTasks = activityManager.appTasks
+                    Log.d("DeviceAdminModule", "Found ${recentTasks.size} app tasks")
+                    
+                    for (appTask in recentTasks) {
+                        try {
+                            val taskInfo = appTask.taskInfo
+                            if (taskInfo != null && taskInfo.baseActivity?.packageName == packageName) {
+                                Log.d("DeviceAdminModule", "Removing task from recent apps: ${taskInfo.id}")
+                                appTask.finishAndRemoveTask()
+                            }
+                        } catch (e: Exception) {
+                            Log.w("DeviceAdminModule", "Failed to remove specific task", e)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("DeviceAdminModule", "Unable to access app tasks", e)
+            }
+            
+            // Strategy 3: Force finish all activities
+            if (currentActivity != null) {
+                Log.d("DeviceAdminModule", "Force finishing all activities")
+                currentActivity.finishAffinity()
+            }
+            
+            // Strategy 4: Kill the process (this should definitely remove from recent apps)
+            try {
+                Log.d("DeviceAdminModule", "Killing app process to ensure complete removal")
+                
+                // Give activities time to finish
+                Thread.sleep(200)
+                
+                // Kill our own process - this removes from recent apps
+                android.os.Process.killProcess(android.os.Process.myPid())
+                
+                // This line should not be reached if the process is killed successfully
+                Log.d("DeviceAdminModule", "App close process completed")
+                ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "closeApp", "App closed and removed from recent apps")
+                promise.resolve("App closed and removed from recent apps successfully")
+                
+            } catch (securityException: SecurityException) {
+                Log.w("DeviceAdminModule", "Security exception when trying to kill process", securityException)
+                
+                // Final fallback: Move to background and try to minimize presence
+                try {
+                    // Move to home screen
+                    val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                        addCategory(Intent.CATEGORY_HOME)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    }
+                    reactApplicationContext.startActivity(homeIntent)
+                    
+                    // Try to finish current activity one more time
+                    if (currentActivity != null) {
+                        currentActivity.finish()
+                    }
+                    
+                    ErrorLogger.logWarning(reactApplicationContext, "DeviceAdminModule", "closeApp", "Process kill failed, moved to background and finished activity", mapOf("exception" to securityException.message))
+                    promise.resolve("App moved to background and minimized (unable to force close)")
+                    
+                } catch (fallbackException: Exception) {
+                    Log.e("DeviceAdminModule", "Even fallback failed", fallbackException)
+                    ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "closeApp", fallbackException)
+                    promise.reject("ERROR", "Failed to close app completely: ${fallbackException.message}")
+                }
+            }
+            
+        } catch (e: Exception) {
+            Log.e("DeviceAdminModule", "Error closing app", e)
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "closeApp", e)
+            promise.reject("ERROR", "Failed to close app: ${e.message}")
+        }
+    }
+
+    @ReactMethod
+    fun startPeriodicService(promise: Promise) {
+        try {
+            WorkManagerServiceManager.startPeriodicService(reactApplicationContext)
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "startPeriodicService", "WorkManager periodic service started")
+            promise.resolve("Periodic service started successfully with WorkManager")
+        } catch (e: Exception) {
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "startPeriodicService", e)
+            promise.reject("ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun stopPeriodicService(promise: Promise) {
+        try {
+            WorkManagerServiceManager.stopPeriodicService(reactApplicationContext)
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "stopPeriodicService", "WorkManager periodic service stopped")
+            promise.resolve("Periodic service stopped successfully")
+        } catch (e: Exception) {
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "stopPeriodicService", e)
+            promise.reject("ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun isPeriodicServiceEnabled(promise: Promise) {
+        try {
+            val isEnabled = WorkManagerServiceManager.isServiceEnabled(reactApplicationContext)
+            val isWorkScheduled = WorkManagerServiceManager.isWorkScheduled(reactApplicationContext)
+            
+            val result = WritableNativeMap().apply {
+                putBoolean("enabled", isEnabled)
+                putBoolean("workScheduled", isWorkScheduled)
+            }
+            
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "isPeriodicServiceEnabled", 
+                "WorkManager service status checked", mapOf("enabled" to isEnabled, "workScheduled" to isWorkScheduled))
+            promise.resolve(result)
+        } catch (e: Exception) {
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "isPeriodicServiceEnabled", e)
+            promise.reject("ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun configureDeviceOwnerPrivileges(promise: Promise) {
+        try {
+            val success = DeviceOwnerPrivilegeManager.configureDeviceOwnerPrivileges(reactApplicationContext)
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "configureDeviceOwnerPrivileges", 
+                "Device Owner privileges configuration completed", mapOf("success" to success))
+            
+            if (success) {
+                promise.resolve("Device Owner privileges configured successfully")
+            } else {
+                promise.resolve("Device Owner privileges configuration completed with some limitations")
+            }
+        } catch (e: Exception) {
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "configureDeviceOwnerPrivileges", e)
+            promise.reject("ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun getServicePrivilegeStatus(promise: Promise) {
+        try {
+            val status = DeviceOwnerPrivilegeManager.getPrivilegeStatus(reactApplicationContext)
+            val serviceStatus = WorkManagerServiceManager.getServiceStatus(reactApplicationContext)
+            
+            val result = WritableNativeMap().apply {
+                // Device Owner privilege status
+                putBoolean("isDeviceOwner", status["isDeviceOwner"] as? Boolean ?: false)
+                putInt("androidVersion", status["androidVersion"] as? Int ?: 0)
+                
+                if (status.containsKey("isIgnoringBatteryOptimizations")) {
+                    putBoolean("isIgnoringBatteryOptimizations", status["isIgnoringBatteryOptimizations"] as? Boolean ?: false)
+                }
+                
+                if (status.containsKey("isDeviceIdleMode")) {
+                    putBoolean("isDeviceIdleMode", status["isDeviceIdleMode"] as? Boolean ?: false)
+                }
+                
+                // WorkManager service status
+                putBoolean("serviceEnabled", serviceStatus["enabled"] as? Boolean ?: false)
+                putBoolean("workScheduled", serviceStatus["workScheduled"] as? Boolean ?: false)
+                putInt("intervalMinutes", serviceStatus["intervalMinutes"] as? Int ?: 30)
+                
+                if (serviceStatus.containsKey("workStates")) {
+                    val workStates = serviceStatus["workStates"] as? List<*>
+                    putString("workStates", workStates?.joinToString(", ") ?: "Unknown")
+                }
+                
+                if (status.containsKey("error")) {
+                    putString("error", status["error"] as? String)
+                }
+            }
+            
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "getServicePrivilegeStatus", 
+                "WorkManager service privilege status retrieved")
+            promise.resolve(result)
+        } catch (e: Exception) {
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "getServicePrivilegeStatus", e)
+            promise.reject("ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun initializeServiceOnStartup(promise: Promise) {
+        try {
+            WorkManagerServiceManager.initializeService(reactApplicationContext)
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "initializeServiceOnStartup", 
+                "WorkManager service initialization completed")
+            promise.resolve("Service initialization completed with WorkManager")
+        } catch (e: Exception) {
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "initializeServiceOnStartup", e)
+            promise.reject("ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun simulateBootCompleted(promise: Promise) {
+        try {
+            Log.d("DeviceAdminModule", "simulateBootCompleted called - triggering delayed boot check directly")
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "simulateBootCompleted", "Simulating delayed boot check")
+            
+            // Instead of sending system broadcast, directly trigger the delayed boot check
+            BootStatusChecker.scheduleBootStatusCheck(reactApplicationContext)
+            
+            // Also directly trigger the delayed receiver for immediate testing
+            val intent = Intent("com.odensecurewave.BOOT_STATUS_CHECK")
+            val receiver = BootStatusReceiver()
+            receiver.onReceive(reactApplicationContext, intent)
+            
+            promise.resolve("Delayed boot check triggered successfully for testing")
+            
+        } catch (e: Exception) {
+            Log.e("DeviceAdminModule", "Error simulating boot check", e)
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "simulateBootCompleted", e)
+            promise.reject("ERROR", "Failed to simulate boot check: ${e.message}")
+        }
+    }
+
+    @ReactMethod
+    fun testBootFirebaseCheck(promise: Promise) {
+        try {
+            Log.d("DeviceAdminModule", "testBootFirebaseCheck called - simulating boot Firebase check")
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "testBootFirebaseCheck", "Simulating boot Firebase check")
+            
+            // Create a simplified version of the boot Firebase check
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    // Get device IMEI
+                    val deviceId = FirebaseDeviceStatusManager.getDeviceImei(reactApplicationContext)
+                    if (deviceId == null) {
+                        Log.w("DeviceAdminModule", "Could not get device IMEI for boot test")
+                        promise.reject("ERROR", "Could not get device IMEI")
+                        return@launch
+                    }
+                    
+                    Log.d("DeviceAdminModule", "Device IMEI for boot test: $deviceId")
+                    
+                    // Check Firebase status
+                    val deviceStatus = FirebaseDeviceStatusManager.getDeviceStatus(reactApplicationContext, deviceId)
+                    Log.d("DeviceAdminModule", "Device status from Firebase in boot test: $deviceStatus")
+                    
+                    when (deviceStatus) {
+                        "lock" -> {
+                            Log.d("DeviceAdminModule", "Status is 'lock' - would launch app")
+                            val launched = AppStateManager.launchApp(reactApplicationContext)
+                            if (launched) {
+                                promise.resolve("Status is 'lock' - App launched successfully in boot test")
+                            } else {
+                                promise.reject("ERROR", "Status is 'lock' but failed to launch app")
+                            }
+                        }
+                        "active" -> {
+                            promise.resolve("Status is 'active' - No app launch needed in boot test")
+                        }
+                        null -> {
+                            promise.reject("ERROR", "Could not retrieve device status from Firebase")
+                        }
+                        else -> {
+                            promise.resolve("Status is '$deviceStatus' - No special action in boot test")
+                        }
+                    }
+                    
+                } catch (e: Exception) {
+                    Log.e("DeviceAdminModule", "Error in boot Firebase check test", e)
+                    promise.reject("ERROR", "Boot Firebase check test failed: ${e.message}")
+                }
+            }
+            
+        } catch (e: Exception) {
+            Log.e("DeviceAdminModule", "Error starting boot Firebase check test", e)
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "testBootFirebaseCheck", e)
+            promise.reject("ERROR", "Failed to start boot Firebase check test: ${e.message}")
         }
     }
 

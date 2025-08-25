@@ -1,6 +1,7 @@
 import database from '@react-native-firebase/database';
 import { FAQItem } from '@/types/faq';
 import { CompanyData, CompanyItem } from '@/types/company';
+import { MonitoredDeviceData } from '@/types/device';
 
 class DatabaseService {
   private static instance: DatabaseService;
@@ -93,6 +94,46 @@ class DatabaseService {
       return companyItems;
     } catch (error) {
       console.error('Error fetching company data:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a monitored device record in Firebase
+   */
+  public async createMonitoredDevice(monitoredDeviceData: MonitoredDeviceData): Promise<void> {
+    try {
+      console.log('Creating monitored device record:', monitoredDeviceData);
+      
+      // Use the deviceId (IMEI) as the key
+      await this.databaseRef.ref(`monitoredDevices/${monitoredDeviceData.deviceId}`).set(monitoredDeviceData);
+      
+      console.log('Monitored device record created successfully');
+    } catch (error) {
+      console.error('Error creating monitored device record:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get full monitored device data including status and isEnabled
+   */
+  public async getMonitoredDeviceData(imei: string): Promise<MonitoredDeviceData | null> {
+    try {
+      console.log('Fetching monitored device data for IMEI:', imei);
+      
+      const snapshot = await this.databaseRef.ref(`monitoredDevices/${imei}`).once('value');
+      const data = snapshot.val();
+      
+      if (!data) {
+        console.log('No monitored device data found for IMEI:', imei);
+        return null;
+      }
+
+      console.log('Monitored device data found:', data);
+      return data as MonitoredDeviceData;
+    } catch (error) {
+      console.error('Error fetching monitored device data:', error);
       throw error;
     }
   }

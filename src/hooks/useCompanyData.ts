@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import DatabaseService from '@/services/databaseService.ts';
-import { CompanyItem, CompanyState } from '@/types/company';
+import { CompanyItem } from '@/types/company';
+import { QUERY_KEYS, QUERY_CONFIG } from '@/constants/storageKeys';
 
 // Fallback mock data
 const fallbackCompanyData: CompanyItem[] = [
@@ -11,45 +12,36 @@ const fallbackCompanyData: CompanyItem[] = [
   { id: '5', name: 'Company E', branch: 'Branch 5' },
 ];
 
-export const useCompanyData = () => {
-  const [state, setState] = useState<CompanyState>({
-    data: [],
-    loading: true,
-    error: null
-  });
-
+// Helper function to fetch company data
+const fetchCompanyData = async (): Promise<CompanyItem[]> => {
   const databaseService = DatabaseService.getInstance();
+  const data = await databaseService.getCompanyData();
+  return data.length > 0 ? data : fallbackCompanyData;
+};
 
-  const fetchCompanyData = async () => {
-    try {
-      setState(prev => ({ ...prev, loading: true, error: null }));
-      
-      const data = await databaseService.getCompanyData();
-      setState({
-        data: data.length > 0 ? data : fallbackCompanyData,
-        loading: false,
-        error: null
-      });
-    } catch (error) {
-      console.error('Error fetching company data:', error);
-      setState({
-        data: fallbackCompanyData,
-        loading: false,
-        error: 'Failed to load company data. Showing cached version.'
-      });
-    }
-  };
-
-  useEffect(() => {
-    fetchCompanyData();
-  }, []);
-
+export const useCompanyData = () => {
+  const {
+    data = fallbackCompanyData,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: QUERY_KEYS.COMPANIES,
+    queryFn: fetchCompanyData,
+    staleTime: QUERY_CONFIG.STALE_TIME.LONG,
+    gcTime: QUERY_CONFIG.CACHE_TIME.LONG,
+    retry: QUERY_CONFIG.RETRY.DEFAULT,
+    placeholderData: fallbackCompanyData,
+  });
+  
   const refreshData = () => {
-    fetchCompanyData();
+    refetch();
   };
 
   return {
-    ...state,
-    refreshData
+    data,
+    loading: isLoading,
+    error: error?.message || null,
+    refreshData,
   };
 }; 
