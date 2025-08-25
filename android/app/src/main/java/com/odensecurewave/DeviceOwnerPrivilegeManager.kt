@@ -396,4 +396,71 @@ object DeviceOwnerPrivilegeManager {
             return false
         }
     }
+    
+    /**
+     * Grant specific permission using Device Owner privileges
+     * @param context Application context
+     * @param permissionName The permission to grant (e.g., Manifest.permission.ACCESS_FINE_LOCATION)
+     * @return true if permission was granted successfully, false otherwise
+     */
+    fun grantPermission(context: Context, permissionName: String): Boolean {
+        return try {
+            Log.d(TAG, "Attempting to grant permission: $permissionName")
+            ErrorLogger.logInfo(context, TAG, "grantPermission", "Attempting to grant permission", mapOf("permission" to permissionName))
+            
+            val devicePolicyManager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+            val adminComponentName = ComponentName(context, AppDeviceAdminReceiver::class.java)
+            val packageName = context.packageName
+            
+            // Check if we have Device Owner privileges
+            val isDeviceOwner = try {
+                devicePolicyManager.isDeviceOwnerApp(packageName)
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not check Device Owner status", e)
+                false
+            }
+            
+            if (!isDeviceOwner) {
+                Log.w(TAG, "App is not Device Owner - cannot grant permissions programmatically")
+                ErrorLogger.logWarning(context, TAG, "grantPermission", "App is not Device Owner")
+                return false
+            }
+            
+            try {
+                // For Device Owner apps, we can grant runtime permissions using setPermissionGrantState
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    val grantState = devicePolicyManager.setPermissionGrantState(
+                        adminComponentName,
+                        packageName,
+                        permissionName,
+                        DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED
+                    )
+                    
+                    if (grantState) {
+                        Log.d(TAG, "Permission granted successfully: $permissionName")
+                        ErrorLogger.logInfo(context, TAG, "grantPermission", "Permission granted successfully", mapOf("permission" to permissionName))
+                        return true
+                    } else {
+                        Log.w(TAG, "Failed to grant permission: $permissionName")
+                        ErrorLogger.logWarning(context, TAG, "grantPermission", "Failed to grant permission", mapOf("permission" to permissionName))
+                        return false
+                    }
+                } else {
+                    // Pre-Android 6.0 devices don't have runtime permissions
+                    Log.d(TAG, "Runtime permissions not required on this Android version")
+                    ErrorLogger.logInfo(context, TAG, "grantPermission", "Runtime permissions not required on this Android version")
+                    return true
+                }
+            } catch (e: SecurityException) {
+                Log.e(TAG, "Security exception when granting permission: $permissionName", e)
+                ErrorLogger.logError(context, TAG, "grantPermission", e, mapOf("permission" to permissionName, "errorType" to "SecurityException"))
+                return false
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error granting permission: $permissionName", e)
+            ErrorLogger.logError(context, TAG, "grantPermission", e, mapOf("permission" to permissionName))
+            return false
+        }
+    }
 }

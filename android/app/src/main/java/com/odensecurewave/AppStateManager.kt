@@ -49,7 +49,7 @@ object AppStateManager {
                 if (topActivity?.packageName == packageName) {
                     Log.d(TAG, "App is running - found in running tasks")
                     ErrorLogger.logInfo(context, TAG, "isAppRunning", "App is running - found in running tasks",
-                        mapOf("topActivity" to topActivity.className))
+                        mapOf("topActivity" to (topActivity?.className ?: "unknown")))
                     return true
                 }
             }
@@ -130,6 +130,53 @@ object AppStateManager {
         } catch (e: Exception) {
             Log.e(TAG, "Error launching app", e)
             ErrorLogger.logError(context, TAG, "launchApp", e)
+            return false
+        }
+    }
+    
+    /**
+     * Close/kill the app
+     * Returns true if successful, false otherwise
+     */
+    fun closeApp(context: Context): Boolean {
+        return try {
+            Log.d(TAG, "Attempting to close app")
+            ErrorLogger.logInfo(context, TAG, "closeApp", "Attempting to close app")
+            
+            val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val packageName = context.packageName
+            
+            // Method 1: Kill background processes
+            activityManager.killBackgroundProcesses(packageName)
+            Log.d(TAG, "Killed background processes for: $packageName")
+            
+            // Method 2: Finish all activities if we have access to them
+            // Note: This might require the app to be running and have proper lifecycle management
+            try {
+                // Force stop the application (requires FORCE_STOP_PACKAGES permission)
+                // This is more aggressive but may not work without system permissions
+                val runtime = Runtime.getRuntime()
+                runtime.exec("am force-stop $packageName")
+                Log.d(TAG, "Executed force-stop command for: $packageName")
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not execute force-stop command", e)
+                // This is expected for non-system apps
+            }
+            
+            // Method 3: System exit as last resort (only affects current process)
+            try {
+                android.os.Process.killProcess(android.os.Process.myPid())
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not kill current process", e)
+            }
+            
+            Log.d(TAG, "App close attempt completed")
+            ErrorLogger.logInfo(context, TAG, "closeApp", "App close attempt completed")
+            return true
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing app", e)
+            ErrorLogger.logError(context, TAG, "closeApp", e)
             return false
         }
     }

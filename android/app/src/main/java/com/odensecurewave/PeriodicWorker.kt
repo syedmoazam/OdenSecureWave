@@ -2,6 +2,7 @@ package com.odensecurewave
 
 import android.content.Context
 import android.os.PowerManager
+import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.work.Worker
 import androidx.work.WorkerParameters
@@ -88,12 +89,6 @@ class PeriodicWorker(
                 checkDeviceStatusAndAct()
             }
             
-            // Execute other periodic tasks
-            logDeviceStatus()
-            checkDeviceAdminStatus()
-            logSystemStats()
-            verifyDeviceOwnerStatus()
-            
             ErrorLogger.logInfo(applicationContext, TAG, "performPeriodicWork", "Periodic work completed", 
                 mapOf("timestamp" to timestamp))
             
@@ -109,191 +104,149 @@ class PeriodicWorker(
      */
     private suspend fun checkDeviceStatusAndAct() {
         try {
-            Log.d(TAG, "Checking device status from Firebase")
+            Log.d(TAG, "Starting device status check and action")
+            ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "Starting device status check")
             
-            // Check if Firebase is available
-            if (!FirebaseDeviceStatusManager.isFirebaseAvailable()) {
-                Log.w(TAG, "Firebase is not available - skipping status check")
-                ErrorLogger.logWarning(applicationContext, TAG, "checkDeviceStatusAndAct", "Firebase is not available")
+            // Step 1: Check if app is running
+            if (AppStateManager.isAppRunning(applicationContext)) {
+                Log.d(TAG, "App is running - skipping device status check")
+                ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "App is running - skipping check")
                 return
             }
             
-            // Get device IMEI for Firebase operations
-            val deviceId = FirebaseDeviceStatusManager.getDeviceImei(applicationContext)
-            if (deviceId == null) {
-                Log.w(TAG, "Could not get device IMEI - skipping status check")
-                ErrorLogger.logWarning(applicationContext, TAG, "checkDeviceStatusAndAct", "Could not get device IMEI")
+            Log.d(TAG, "App is not running - proceeding with device status check")
+            
+            // Step 2: Get device IMEI number
+            val deviceImei = getDeviceImei()
+            if (deviceImei == null) {
+                Log.e(TAG, "Could not retrieve device IMEI - aborting status check")
+                ErrorLogger.logError(applicationContext, TAG, "checkDeviceStatusAndAct", Exception("Could not retrieve device IMEI"))
                 return
             }
             
-            // Fetch device status from Firebase
-            val deviceStatus = FirebaseDeviceStatusManager.getDeviceStatus(applicationContext, deviceId)
-            Log.d(TAG, "Device status from Firebase: $deviceStatus")
+            Log.d(TAG, "Device IMEI retrieved: $deviceImei")
+            ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "Device IMEI retrieved", mapOf("imei" to deviceImei))
             
-            when (deviceStatus) {
+            // Step 3: Get device status from Firebase
+            val referencePath = "monitoredDevices/$deviceImei/status"
+            val deviceStatus = FirebaseUtils.getData(applicationContext, referencePath)
+            
+            if (deviceStatus == null) {
+                Log.w(TAG, "Could not retrieve device status from Firebase")
+                ErrorLogger.logWarning(applicationContext, TAG, "checkDeviceStatusAndAct", "Could not retrieve device status", mapOf("path" to referencePath))
+                return
+            }
+            
+            val statusString = deviceStatus.toString()
+            Log.d(TAG, "Device status retrieved from Firebase: $statusString")
+            ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "Device status retrieved", mapOf("status" to statusString, "imei" to deviceImei))
+            
+            // Step 4: Handle status based actions
+            when (statusString.lowercase()) {
+                "active" -> {
+                    Log.d(TAG, "Device status is 'active' - no action required")
+                    ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "Device status is active - no action required")
+                    return
+                }
                 "lock" -> {
-                    Log.d(TAG, "Device status is 'lock' - executing lock procedures")
-                    ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "Device status is 'lock' - executing lock procedures")
+                    Log.d(TAG, "Device status is 'lock' - proceeding with location update and app launch")
+                    ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "Device status is lock - proceeding with actions")
                     
-                    // REQUIREMENT 3: Get current location and update Firebase
-                    val locationData = DeviceLocationManager.getCurrentLocation(applicationContext)
-                    if (locationData != null) {
+                    // Step 5: Get current location
+                    val locationData = DeviceLocationManager.getLocation(applicationContext)
+                    if (locationData == null) {
+                        Log.w(TAG, "Could not retrieve device location")
+                        ErrorLogger.logWarning(applicationContext, TAG, "checkDeviceStatusAndAct", "Could not retrieve device location")
+                    } else {
                         Log.d(TAG, "Location retrieved: $locationData")
+                        ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "Location retrieved successfully", 
+                            mapOf("latitude" to locationData.latitude, "longitude" to locationData.longitude))
                         
-                        // Update Firebase with location
-                        val locationUpdated = FirebaseDeviceStatusManager.updateDeviceLocation(applicationContext, deviceId, locationData)
+                        // Step 6: Update location in Firebase
+                        val locationPath = "monitoredDevices/$deviceImei/lastLocation"
+                        val locationUpdateData = mapOf(
+                            "latitude" to locationData.latitude,
+                            "longitude" to locationData.longitude,
+                            "accuracy" to locationData.accuracy,
+                            "timestamp" to locationData.timestamp,
+                            "provider" to locationData.provider,
+                            "updatedAt" to System.currentTimeMillis()
+                        )
+                        
+                        val locationUpdated = FirebaseUtils.updateData(applicationContext, locationPath, locationUpdateData)
                         if (locationUpdated) {
                             Log.d(TAG, "Location updated in Firebase successfully")
-                            ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "Location updated in Firebase successfully")
+                            ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "Location updated in Firebase", 
+                                mapOf("path" to locationPath, "imei" to deviceImei))
                         } else {
                             Log.w(TAG, "Failed to update location in Firebase")
                             ErrorLogger.logWarning(applicationContext, TAG, "checkDeviceStatusAndAct", "Failed to update location in Firebase")
                         }
-                    } else {
-                        Log.w(TAG, "Could not retrieve device location")
-                        ErrorLogger.logWarning(applicationContext, TAG, "checkDeviceStatusAndAct", "Could not retrieve device location")
                     }
                     
-                    // REQUIREMENT 4: Launch the app
+                    // Step 7: Launch the app
                     val appLaunched = AppStateManager.launchApp(applicationContext)
                     if (appLaunched) {
-                        Log.d(TAG, "App launched successfully for lock status")
-                        ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "App launched successfully for lock status")
+                        Log.d(TAG, "App launched successfully")
+                        ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "App launched successfully", mapOf("imei" to deviceImei))
                     } else {
-                        Log.w(TAG, "Failed to launch app for lock status")
-                        ErrorLogger.logWarning(applicationContext, TAG, "checkDeviceStatusAndAct", "Failed to launch app for lock status")
+                        Log.e(TAG, "Failed to launch app")
+                        ErrorLogger.logError(applicationContext, TAG, "checkDeviceStatusAndAct", Exception("Failed to launch app"), mapOf("imei" to deviceImei))
                     }
                 }
-                "active" -> {
-                    Log.d(TAG, "Device status is 'active' - no special action required")
-                    ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "Device status is 'active' - no special action required")
-                }
-                null -> {
-                    Log.w(TAG, "Could not retrieve device status from Firebase")
-                    ErrorLogger.logWarning(applicationContext, TAG, "checkDeviceStatusAndAct", "Could not retrieve device status from Firebase")
-                }
                 else -> {
-                    Log.d(TAG, "Device status is '$deviceStatus' - no special action defined")
-                    ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "Device status retrieved", mapOf("status" to deviceStatus))
+                    Log.d(TAG, "Unknown device status: $statusString - no action taken")
+                    ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "Unknown device status", 
+                        mapOf("status" to statusString, "imei" to deviceImei))
                 }
             }
             
         } catch (e: Exception) {
-            Log.e(TAG, "Error checking device status and acting", e)
+            Log.e(TAG, "Error in checkDeviceStatusAndAct", e)
             ErrorLogger.logError(applicationContext, TAG, "checkDeviceStatusAndAct", e)
         }
     }
     
-
-    
     /**
-     * Log current device status
+     * Get device IMEI number
      */
-    private fun logDeviceStatus() {
-        try {
-            val deviceInfo = mutableMapOf<String, Any>()
+    private fun getDeviceImei(): String? {
+        return try {
+            Log.d(TAG, "Attempting to get device IMEI")
             
-            // Battery information
-            val powerManager = applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+            val telephonyManager = applicationContext.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+            
+            // Check if we have permission
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                deviceInfo["isPowerSaveMode"] = powerManager.isPowerSaveMode
-                deviceInfo["isIgnoringBatteryOptimizations"] = powerManager.isIgnoringBatteryOptimizations(applicationContext.packageName)
+                if (applicationContext.checkSelfPermission(android.Manifest.permission.READ_PHONE_STATE) != 
+                    android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    Log.w(TAG, "READ_PHONE_STATE permission not granted")
+                    ErrorLogger.logWarning(applicationContext, TAG, "getDeviceImei", "READ_PHONE_STATE permission not granted")
+                    return null
+                }
             }
             
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                deviceInfo["isDeviceIdleMode"] = powerManager.isDeviceIdleMode
-            }
-            
-            // Network connectivity (basic check)
-            val connectivityManager = applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
-            val activeNetwork = connectivityManager.activeNetworkInfo
-            deviceInfo["isNetworkConnected"] = activeNetwork?.isConnected ?: false
-            
-            Log.d(TAG, "Device status: $deviceInfo")
-            ErrorLogger.logInfo(applicationContext, TAG, "logDeviceStatus", "Device status logged", deviceInfo)
-            
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not log device status", e)
-            ErrorLogger.logWarning(applicationContext, TAG, "logDeviceStatus", "Could not log device status", mapOf("error" to e.message))
-        }
-    }
-    
-    /**
-     * Check device admin status
-     */
-    private fun checkDeviceAdminStatus() {
-        try {
-            val devicePolicyManager = applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
-            val adminComponentName = android.content.ComponentName(applicationContext, AppDeviceAdminReceiver::class.java)
-            
-            val isAdminActive = devicePolicyManager.isAdminActive(adminComponentName)
-            val isDeviceOwner = try {
-                devicePolicyManager.isDeviceOwnerApp(applicationContext.packageName)
-            } catch (e: Exception) {
-                false
-            }
-            
-            val adminStatus = mapOf(
-                "isAdminActive" to isAdminActive,
-                "isDeviceOwner" to isDeviceOwner
-            )
-            
-            Log.d(TAG, "Device admin status: $adminStatus")
-            ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceAdminStatus", "Device admin status checked", adminStatus)
-            
-            // If admin privileges are lost, this might be a security concern
-            if (!isAdminActive) {
-                ErrorLogger.logWarning(applicationContext, TAG, "checkDeviceAdminStatus", "Device admin is no longer active!")
-            }
-            
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not check device admin status", e)
-            ErrorLogger.logError(applicationContext, TAG, "checkDeviceAdminStatus", e)
-        }
-    }
-    
-    /**
-     * Log system statistics
-     */
-    private fun logSystemStats() {
-        try {
-            val runtime = Runtime.getRuntime()
-            val systemStats = mapOf(
-                "totalMemory" to runtime.totalMemory(),
-                "freeMemory" to runtime.freeMemory(),
-                "maxMemory" to runtime.maxMemory(),
-                "availableProcessors" to runtime.availableProcessors(),
-                "currentTimeMillis" to System.currentTimeMillis()
-            )
-            
-            Log.d(TAG, "System stats: $systemStats")
-            ErrorLogger.logInfo(applicationContext, TAG, "logSystemStats", "System stats logged", systemStats)
-            
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not log system stats", e)
-            ErrorLogger.logWarning(applicationContext, TAG, "logSystemStats", "Could not log system stats", mapOf("error" to e.message))
-        }
-    }
-    
-    /**
-     * Verify Device Owner status (important for security)
-     */
-    private fun verifyDeviceOwnerStatus() {
-        try {
-            val devicePolicyManager = applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
-            val isDeviceOwner = devicePolicyManager.isDeviceOwnerApp(applicationContext.packageName)
-            
-            if (isDeviceOwner) {
-                Log.d(TAG, "Device Owner status confirmed")
-                ErrorLogger.logInfo(applicationContext, TAG, "verifyDeviceOwnerStatus", "Device Owner status confirmed")
+            val imei = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                telephonyManager.imei
             } else {
-                Log.w(TAG, "Device Owner status lost or not set")
-                ErrorLogger.logWarning(applicationContext, TAG, "verifyDeviceOwnerStatus", "Device Owner status lost or not set")
+                @Suppress("DEPRECATION")
+                telephonyManager.deviceId
+            }
+            
+            if (imei.isNullOrEmpty()) {
+                Log.w(TAG, "IMEI is null or empty")
+                ErrorLogger.logWarning(applicationContext, TAG, "getDeviceImei", "IMEI is null or empty")
+                null
+            } else {
+                Log.d(TAG, "Device IMEI retrieved successfully")
+                ErrorLogger.logInfo(applicationContext, TAG, "getDeviceImei", "IMEI retrieved successfully")
+                imei
             }
             
         } catch (e: Exception) {
-            Log.w(TAG, "Could not verify Device Owner status", e)
-            ErrorLogger.logWarning(applicationContext, TAG, "verifyDeviceOwnerStatus", "Could not verify Device Owner status", mapOf("error" to e.message))
+            Log.e(TAG, "Error getting device IMEI", e)
+            ErrorLogger.logError(applicationContext, TAG, "getDeviceImei", e)
+            null
         }
     }
 }

@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import androidx.core.content.ContextCompat
 
@@ -18,31 +19,174 @@ object DeviceLocationManager {
     private const val LOCATION_TIMEOUT = 30_000L // 30 seconds timeout
     
     /**
-     * Get current device location using Device Owner privileges
-     * Returns null if location cannot be obtained
+     * Check if the app has location permissions
+     * @param context Application context
+     * @return true if location permissions are granted, false otherwise
      */
-    fun getCurrentLocation(context: Context): LocationData? {
+    fun hasLocationPermission(context: Context): Boolean {
         return try {
-            Log.d(TAG, "Attempting to get current device location")
-            ErrorLogger.logInfo(context, TAG, "getCurrentLocation", "Starting location retrieval")
+            Log.d(TAG, "Checking location permissions")
+            ErrorLogger.logInfo(context, TAG, "hasLocationPermission", "Checking location permissions")
             
-            // Check if we have location permissions (should be granted for Device Owner)
-            if (!hasLocationPermissions(context)) {
-                Log.w(TAG, "Location permissions not granted")
-                ErrorLogger.logWarning(context, TAG, "getCurrentLocation", "Location permissions not granted")
-                return null
+            val fineLocationGranted = ContextCompat.checkSelfPermission(
+                context, 
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+            
+            val coarseLocationGranted = ContextCompat.checkSelfPermission(
+                context, 
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+            
+            val backgroundLocationGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContextCompat.checkSelfPermission(
+                    context, 
+                    Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED
+            } else {
+                true // Not required for older Android versions
             }
+            
+            val hasPermissions = fineLocationGranted || coarseLocationGranted
+            
+            Log.d(TAG, "Location permissions - Fine: $fineLocationGranted, Coarse: $coarseLocationGranted, Background: $backgroundLocationGranted")
+            ErrorLogger.logInfo(context, TAG, "hasLocationPermission", "Location permission check completed", 
+                mapOf("fine" to fineLocationGranted, "coarse" to coarseLocationGranted, "background" to backgroundLocationGranted, "hasPermissions" to hasPermissions))
+            
+            return hasPermissions
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking location permissions", e)
+            ErrorLogger.logError(context, TAG, "hasLocationPermission", e)
+            false
+        }
+    }
+    
+    /**
+     * Get location permissions using Device Owner privileges
+     * @param context Application context
+     * @return true if permissions were granted successfully, false otherwise
+     */
+    fun getLocationPermission(context: Context): Boolean {
+        return try {
+            Log.d(TAG, "Attempting to get location permissions using Device Owner privileges")
+            ErrorLogger.logInfo(context, TAG, "getLocationPermission", "Attempting to get location permissions")
+            
+            // Check if we already have permissions
+            if (hasLocationPermission(context)) {
+                Log.d(TAG, "Location permissions already granted")
+                ErrorLogger.logInfo(context, TAG, "getLocationPermission", "Location permissions already granted")
+                return true
+            }
+            
+            var allGranted = true
+            
+            // Grant fine location permission
+            val fineLocationGranted = DeviceOwnerPrivilegeManager.grantPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+            if (!fineLocationGranted) {
+                Log.w(TAG, "Failed to grant fine location permission")
+                allGranted = false
+            }
+            
+            // Grant coarse location permission as fallback
+            val coarseLocationGranted = DeviceOwnerPrivilegeManager.grantPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+            if (!coarseLocationGranted) {
+                Log.w(TAG, "Failed to grant coarse location permission")
+                if (!fineLocationGranted) allGranted = false
+            }
+            
+            // Grant background location permission for Android 10+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val backgroundLocationGranted = DeviceOwnerPrivilegeManager.grantPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                if (!backgroundLocationGranted) {
+                    Log.w(TAG, "Failed to grant background location permission")
+                    // Don't mark as failure since background location is not always critical
+                }
+            }
+            
+            if (allGranted) {
+                Log.d(TAG, "Location permissions granted successfully")
+                ErrorLogger.logInfo(context, TAG, "getLocationPermission", "Location permissions granted successfully")
+            } else {
+                Log.w(TAG, "Some location permissions could not be granted")
+                ErrorLogger.logWarning(context, TAG, "getLocationPermission", "Some location permissions could not be granted")
+            }
+            
+            return allGranted
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting location permissions", e)
+            ErrorLogger.logError(context, TAG, "getLocationPermission", e)
+            false
+        }
+    }
+    
+    /**
+     * Check if location services are enabled on the device
+     * @param context Application context
+     * @return true if location is enabled, false otherwise
+     */
+    fun isLocationEnabled(context: Context): Boolean {
+        return try {
+            Log.d(TAG, "Checking if location services are enabled")
+            ErrorLogger.logInfo(context, TAG, "isLocationEnabled", "Checking location services status")
             
             val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
             
-            // Check if location services are enabled
-            if (!isLocationEnabled(locationManager)) {
-                Log.w(TAG, "Location services are disabled")
-                ErrorLogger.logWarning(context, TAG, "getCurrentLocation", "Location services are disabled")
-                return null
+            val isEnabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                locationManager.isLocationEnabled
+            } else {
+                @Suppress("DEPRECATION")
+                val gpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+                @Suppress("DEPRECATION")
+                val networkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+                gpsEnabled || networkEnabled
             }
             
-            // Try to get last known location from different providers
+            Log.d(TAG, "Location services enabled: $isEnabled")
+            ErrorLogger.logInfo(context, TAG, "isLocationEnabled", "Location services status checked", mapOf("enabled" to isEnabled))
+            
+            return isEnabled
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking if location is enabled", e)
+            ErrorLogger.logError(context, TAG, "isLocationEnabled", e)
+            false
+        }
+    }
+    
+    /**
+     * Get current device location. If location is not enabled, it will programmatically turn on location and return location data.
+     * @param context Application context
+     * @return LocationData if successful, null otherwise
+     */
+    fun getLocation(context: Context): LocationData? {
+        return try {
+            Log.d(TAG, "Getting device location with auto-enable functionality")
+            ErrorLogger.logInfo(context, TAG, "getLocation", "Starting location retrieval with auto-enable")
+            
+            // Step 1: Ensure we have location permissions
+            if (!hasLocationPermission(context)) {
+                Log.d(TAG, "Location permissions not available, attempting to get them")
+                if (!getLocationPermission(context)) {
+                    Log.e(TAG, "Could not obtain location permissions")
+                    ErrorLogger.logError(context, TAG, "getLocation", Exception("Could not obtain location permissions"))
+                    return null
+                }
+            }
+            
+            // Step 2: Check if location is enabled, if not try to enable it
+            if (!isLocationEnabled(context)) {
+                Log.d(TAG, "Location services disabled, attempting to enable programmatically")
+                if (!enableLocationServices(context)) {
+                    Log.e(TAG, "Could not enable location services")
+                    ErrorLogger.logError(context, TAG, "getLocation", Exception("Could not enable location services"))
+                    return null
+                }
+            }
+            
+            // Step 3: Get the actual location
+            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
             val location = getBestLastKnownLocation(locationManager)
             
             if (location != null) {
@@ -55,7 +199,7 @@ object DeviceLocationManager {
                 )
                 
                 Log.d(TAG, "Location retrieved successfully: $locationData")
-                ErrorLogger.logInfo(context, TAG, "getCurrentLocation", "Location retrieved successfully", 
+                ErrorLogger.logInfo(context, TAG, "getLocation", "Location retrieved successfully", 
                     mapOf(
                         "latitude" to location.latitude,
                         "longitude" to location.longitude,
@@ -66,55 +210,49 @@ object DeviceLocationManager {
                 return locationData
             } else {
                 Log.w(TAG, "No location available from any provider")
-                ErrorLogger.logWarning(context, TAG, "getCurrentLocation", "No location available from any provider")
+                ErrorLogger.logWarning(context, TAG, "getLocation", "No location available from any provider")
                 return null
             }
             
         } catch (e: SecurityException) {
             Log.e(TAG, "Security exception getting location (should not happen for Device Owner)", e)
-            ErrorLogger.logError(context, TAG, "getCurrentLocation", e, mapOf("errorType" to "SecurityException"))
+            ErrorLogger.logError(context, TAG, "getLocation", e, mapOf("errorType" to "SecurityException"))
             null
         } catch (e: Exception) {
-            Log.e(TAG, "Error getting current location", e)
-            ErrorLogger.logError(context, TAG, "getCurrentLocation", e)
+            Log.e(TAG, "Error getting location", e)
+            ErrorLogger.logError(context, TAG, "getLocation", e)
             null
         }
     }
     
     /**
-     * Check if the app has location permissions
+     * Enable location services programmatically using Device Owner privileges
      */
-    private fun hasLocationPermissions(context: Context): Boolean {
-        val fineLocationGranted = ContextCompat.checkSelfPermission(
-            context, 
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        
-        val coarseLocationGranted = ContextCompat.checkSelfPermission(
-            context, 
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        
-        val backgroundLocationGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ContextCompat.checkSelfPermission(
-                context, 
-                Manifest.permission.ACCESS_BACKGROUND_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true // Not required for older Android versions
-        }
-        
-        Log.d(TAG, "Location permissions - Fine: $fineLocationGranted, Coarse: $coarseLocationGranted, Background: $backgroundLocationGranted")
-        
-        return fineLocationGranted || coarseLocationGranted
-    }
-    
-    /**
-     * Check if location services are enabled on the device
-     */
-    private fun isLocationEnabled(locationManager: LocationManager): Boolean {
+    private fun enableLocationServices(context: Context): Boolean {
         return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            Log.d(TAG, "Attempting to enable location services using Device Owner privileges")
+            ErrorLogger.logInfo(context, TAG, "enableLocationServices", "Attempting to enable location services")
+            
+            // For Device Owner apps, we can enable location services programmatically
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    // Android 9.0+ - Location mode is managed differently
+                    Log.d(TAG, "Android 9.0+ detected - location enabling may require user interaction")
+                    ErrorLogger.logInfo(context, TAG, "enableLocationServices", "Android 9.0+ - limited programmatic control")
+                } else {
+                    // Pre-Android 9.0 approach
+                    @Suppress("DEPRECATION")
+                    Settings.Secure.putInt(context.contentResolver, Settings.Secure.LOCATION_MODE, Settings.Secure.LOCATION_MODE_HIGH_ACCURACY)
+                    Log.d(TAG, "Location services enabled successfully (Pre-Android 9.0)")
+                    ErrorLogger.logInfo(context, TAG, "enableLocationServices", "Location services enabled successfully (Pre-Android 9.0)")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not enable location services via Settings", e)
+            }
+            
+            // Fallback: Check if location is now enabled after our attempts
+            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            val isEnabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 locationManager.isLocationEnabled
             } else {
                 @Suppress("DEPRECATION")
@@ -123,8 +261,20 @@ object DeviceLocationManager {
                 val networkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
                 gpsEnabled || networkEnabled
             }
+            
+            if (isEnabled) {
+                Log.d(TAG, "Location services are now enabled")
+                ErrorLogger.logInfo(context, TAG, "enableLocationServices", "Location services are now enabled")
+                return true
+            } else {
+                Log.w(TAG, "Location services could not be enabled programmatically")
+                ErrorLogger.logWarning(context, TAG, "enableLocationServices", "Location services could not be enabled programmatically")
+                return false
+            }
+            
         } catch (e: Exception) {
-            Log.w(TAG, "Error checking if location is enabled", e)
+            Log.e(TAG, "Error enabling location services", e)
+            ErrorLogger.logError(context, TAG, "enableLocationServices", e)
             false
         }
     }

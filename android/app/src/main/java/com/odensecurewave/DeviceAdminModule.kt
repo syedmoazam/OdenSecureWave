@@ -677,30 +677,19 @@ class DeviceAdminModule(reactContext: ReactApplicationContext) : ReactContextBas
     @ReactMethod
     fun launchApp(promise: Promise) {
         try {
-            Log.d("DeviceAdminModule", "launchApp called - launching application")
-            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "launchApp", "App launch requested")
+            Log.d("DeviceAdminModule", "launchApp called - using AppStateManager")
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "launchApp", "App launch requested via AppStateManager")
             
-            val packageName = reactApplicationContext.packageName
-            val packageManager = reactApplicationContext.packageManager
+            val success = AppStateManager.launchApp(reactApplicationContext)
             
-            // Get the main launcher intent for this app
-            val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-            
-            if (launchIntent != null) {
-                // Clear any existing task stack and start fresh
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                
-                Log.d("DeviceAdminModule", "Starting app with launch intent: $packageName")
-                reactApplicationContext.startActivity(launchIntent)
-                
-                Log.d("DeviceAdminModule", "App launched successfully")
-                ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "launchApp", "App launched successfully", mapOf("packageName" to packageName))
+            if (success) {
+                Log.d("DeviceAdminModule", "App launched successfully via AppStateManager")
+                ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "launchApp", "App launched successfully via AppStateManager")
                 promise.resolve("App launched successfully")
-                
             } else {
-                Log.e("DeviceAdminModule", "No launch intent found for package: $packageName")
-                ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "launchApp", Exception("No launch intent found"), mapOf("packageName" to packageName))
-                promise.reject("ERROR", "Unable to find launch intent for the app")
+                Log.e("DeviceAdminModule", "Failed to launch app via AppStateManager")
+                ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "launchApp", Exception("AppStateManager.launchApp returned false"))
+                promise.reject("ERROR", "Failed to launch app")
             }
             
         } catch (e: Exception) {
@@ -713,90 +702,19 @@ class DeviceAdminModule(reactContext: ReactApplicationContext) : ReactContextBas
     @ReactMethod
     fun closeApp(promise: Promise) {
         try {
-            Log.d("DeviceAdminModule", "closeApp called - closing and removing from recent apps")
-            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "closeApp", "App close and removal from recent apps requested")
+            Log.d("DeviceAdminModule", "closeApp called - using AppStateManager")
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "closeApp", "App close requested via AppStateManager")
             
-            val currentActivity = reactApplicationContext.currentActivity
-            val packageName = reactApplicationContext.packageName
+            val success = AppStateManager.closeApp(reactApplicationContext)
             
-            // Strategy 1: Use finishAndRemoveTask (API 21+) - This removes from recent apps
-            if (currentActivity != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                Log.d("DeviceAdminModule", "Using finishAndRemoveTask to remove from recent apps")
-                currentActivity.finishAndRemoveTask()
-                
-                // Give it a moment to process
-                Thread.sleep(100)
-            }
-            
-            // Strategy 2: Try to remove from recent tasks using ActivityManager (if we have permissions)
-            try {
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                    val activityManager = reactApplicationContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-                    val recentTasks = activityManager.appTasks
-                    Log.d("DeviceAdminModule", "Found ${recentTasks.size} app tasks")
-                    
-                    for (appTask in recentTasks) {
-                        try {
-                            val taskInfo = appTask.taskInfo
-                            if (taskInfo != null && taskInfo.baseActivity?.packageName == packageName) {
-                                Log.d("DeviceAdminModule", "Removing task from recent apps: ${taskInfo.id}")
-                                appTask.finishAndRemoveTask()
-                            }
-                        } catch (e: Exception) {
-                            Log.w("DeviceAdminModule", "Failed to remove specific task", e)
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                Log.w("DeviceAdminModule", "Unable to access app tasks", e)
-            }
-            
-            // Strategy 3: Force finish all activities
-            if (currentActivity != null) {
-                Log.d("DeviceAdminModule", "Force finishing all activities")
-                currentActivity.finishAffinity()
-            }
-            
-            // Strategy 4: Kill the process (this should definitely remove from recent apps)
-            try {
-                Log.d("DeviceAdminModule", "Killing app process to ensure complete removal")
-                
-                // Give activities time to finish
-                Thread.sleep(200)
-                
-                // Kill our own process - this removes from recent apps
-                android.os.Process.killProcess(android.os.Process.myPid())
-                
-                // This line should not be reached if the process is killed successfully
-                Log.d("DeviceAdminModule", "App close process completed")
-                ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "closeApp", "App closed and removed from recent apps")
-                promise.resolve("App closed and removed from recent apps successfully")
-                
-            } catch (securityException: SecurityException) {
-                Log.w("DeviceAdminModule", "Security exception when trying to kill process", securityException)
-                
-                // Final fallback: Move to background and try to minimize presence
-                try {
-                    // Move to home screen
-                    val homeIntent = Intent(Intent.ACTION_MAIN).apply {
-                        addCategory(Intent.CATEGORY_HOME)
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                    }
-                    reactApplicationContext.startActivity(homeIntent)
-                    
-                    // Try to finish current activity one more time
-                    if (currentActivity != null) {
-                        currentActivity.finish()
-                    }
-                    
-                    ErrorLogger.logWarning(reactApplicationContext, "DeviceAdminModule", "closeApp", "Process kill failed, moved to background and finished activity", mapOf("exception" to securityException.message))
-                    promise.resolve("App moved to background and minimized (unable to force close)")
-                    
-                } catch (fallbackException: Exception) {
-                    Log.e("DeviceAdminModule", "Even fallback failed", fallbackException)
-                    ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "closeApp", fallbackException)
-                    promise.reject("ERROR", "Failed to close app completely: ${fallbackException.message}")
-                }
+            if (success) {
+                Log.d("DeviceAdminModule", "App closed successfully via AppStateManager")
+                ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "closeApp", "App closed successfully via AppStateManager")
+                promise.resolve("App closed successfully")
+            } else {
+                Log.e("DeviceAdminModule", "Failed to close app via AppStateManager")
+                ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "closeApp", Exception("AppStateManager.closeApp returned false"))
+                promise.reject("ERROR", "Failed to close app")
             }
             
         } catch (e: Exception) {
