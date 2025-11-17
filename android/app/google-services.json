@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "198077290399",
+    "firebase_url": "https://ims-tracking-ad08f-default-rtdb.firebaseio.com",
+    "project_id": "ims-tracking-ad08f",
+    "storage_bucket": "ims-tracking-ad08f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:198077290399:android:939bf3f5f3a23433810faa",
+        "android_client_info": {
+          "package_name": "com.ib.secure"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAyLpNWrV9kqN2fVokpVs4Vuehc74zK788"
+        },
+        {
+          "current_key": "AIzaSyAsm6dPAL9dv9ywMxEdIS_l5JENoD3A3Kg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:198077290399:android:08cf96d233cfd297810faa",
+        "android_client_info": {
+          "package_name": "com.odensecurewave"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAyLpNWrV9kqN2fVokpVs4Vuehc74zK788"
+        },
+        {
+          "current_key": "AIzaSyAsm6dPAL9dv9ywMxEdIS_l5JENoD3A3Kg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

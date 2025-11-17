@@ -1,21 +1,13 @@
 import { NativeModules, Platform } from 'react-native';
 
-interface DeviceAdminModuleInterface {
-  isDeviceAdminEnabled(): Promise<boolean>;
-  enableDeviceAdmin(): Promise<string>;
-  disableDeviceAdmin(): Promise<string>;
-  lockDevice(): Promise<string>;
-  wipeDevice(confirm: boolean): Promise<string>;
-  setPasswordPolicy(minLength: number): Promise<string>;
-  checkBootCompletedStatus(): Promise<boolean>;
-  setBootCompletedStatus(value: boolean): Promise<string>;
-  setCameraDisabled(disabled: boolean): Promise<string>;
-  isCameraDisabled(): Promise<boolean>;
-  setKeyguardDisabledFeatures(features: number): Promise<string>;
-  getKeyguardDisabledFeatures(): Promise<number>;
-  isDeviceOwner(): Promise<boolean>;
-  isProfileOwner(): Promise<boolean>;
-  testBridge(): Promise<string>;
+interface DeviceInfo {
+  manufacturer: string;
+  model: string;
+  brand: string;
+  device: string;
+  product: string;
+  androidVersion: string;
+  apiLevel: number;
 }
 
 const { DeviceAdminModule } = NativeModules;
@@ -114,37 +106,6 @@ class DeviceAdminManager {
     return DeviceAdminModule.isCameraDisabled();
   }
 
-  // Set keyguard disabled features
-  async setKeyguardDisabledFeatures(features: number): Promise<string> {
-    if (Platform.OS !== 'android') {
-      throw new Error('Device Admin is only available on Android');
-    }
-    return DeviceAdminModule.setKeyguardDisabledFeatures(features);
-  }
-
-  // Get keyguard disabled features
-  async getKeyguardDisabledFeatures(): Promise<number> {
-    if (Platform.OS !== 'android') {
-      throw new Error('Device Admin is only available on Android');
-    }
-    return DeviceAdminModule.getKeyguardDisabledFeatures();
-  }
-
-  // Check if app is device owner
-  async isDeviceOwner(): Promise<boolean> {
-    if (Platform.OS !== 'android') {
-      throw new Error('Device Admin is only available on Android');
-    }
-    return DeviceAdminModule.isDeviceOwner();
-  }
-
-  // Check if app is profile owner
-  async isProfileOwner(): Promise<boolean> {
-    if (Platform.OS !== 'android') {
-      throw new Error('Device Admin is only available on Android');
-    }
-    return DeviceAdminModule.isProfileOwner();
-  }
 
   // Test if bridge is working
   async testBridge(): Promise<string> {
@@ -153,6 +114,129 @@ class DeviceAdminManager {
     }
     return DeviceAdminModule.testBridge();
   }
+
+         /**
+   * Get device IMEI
+   */
+    public async getDeviceIMEI(): Promise<string> {
+      try {
+        if (Platform.OS !== 'android') {
+          throw new Error('IMEI is only available on Android devices');
+        }
+        
+        const imei = await DeviceAdminModule.getDeviceIMEI();
+        return imei;
+      } catch (error) {
+        console.error('Error getting device IMEI:', error);
+        throw error;
+      }
+    }
+
+  /**
+   * Get device information (manufacturer, model, etc.)
+   */
+  public async getDeviceInfo(): Promise<DeviceInfo> {
+    try {
+      if (Platform.OS !== 'android') {
+        throw new Error('Device info is only available on Android devices');
+      }
+      
+      const deviceInfo = await DeviceAdminModule.getDeviceInfo();
+      return deviceInfo;
+    } catch (error) {
+      console.error('Error getting device info:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Enable kiosk mode - locks device to only this app
+   */
+  public async lockApp(): Promise<string> {
+    try {
+      if (Platform.OS !== 'android') {
+        throw new Error('Kiosk mode is only available on Android devices');
+      }
+      
+      const result = await DeviceAdminModule.lockApp();
+      return result;
+    } catch (error) {
+      console.error('Error enabling kiosk mode:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Disable kiosk mode - allows normal device usage
+   */
+  public async unlockApp(): Promise<string> {
+    try {
+      if (Platform.OS !== 'android') {
+        throw new Error('Kiosk mode is only available on Android devices');
+      }
+      
+      const result = await DeviceAdminModule.unlockApp();
+      return result;
+    } catch (error) {
+      console.error('Error disabling kiosk mode:', error);
+      throw error;
+    }
+  }
+
+
+  /**
+   * Close/terminate the application
+   */
+  public async closeApp(): Promise<string> {
+    try {
+      if (Platform.OS !== 'android') {
+        throw new Error('App close control is only available on Android devices');
+      }
+      
+      const result = await DeviceAdminModule.closeApp();
+      return result;
+    } catch (error) {
+      console.error('Error closing app:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Start the WorkManager periodic service
+   */
+  public async startPeriodicService(): Promise<string> {
+    try {
+      if (Platform.OS !== 'android') {
+        throw new Error('Periodic service is only available on Android devices');
+      }
+      
+      const result = await DeviceAdminModule.startPeriodicService();
+      return result;
+    } catch (error) {
+      console.error('Error starting periodic service:', error);
+      throw error;
+    }
+  }
+
+
+  /**
+   * Configure Device Owner privileges for better service reliability
+   */
+  public async configureDeviceOwnerPrivileges(): Promise<string> {
+    try {
+      if (Platform.OS !== 'android') {
+        throw new Error('Device Owner privileges are only available on Android devices');
+      }
+      
+      const result = await DeviceAdminModule.configureDeviceOwnerPrivileges();
+      return result;
+    } catch (error) {
+      console.error('Error configuring Device Owner privileges:', error);
+      throw error;
+    }
+  }
+
+
 }
 
 export default DeviceAdminManager;

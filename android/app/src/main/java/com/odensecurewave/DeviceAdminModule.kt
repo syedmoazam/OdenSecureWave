@@ -1,12 +1,25 @@
 package com.odensecurewave
 
+import android.app.ActivityManager
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.os.IBinder
+import android.os.PowerManager
+import android.os.Process
+import android.telephony.TelephonyManager
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class DeviceAdminModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
@@ -235,57 +248,9 @@ class DeviceAdminModule(reactContext: ReactApplicationContext) : ReactContextBas
         }
     }
 
-    @ReactMethod
-    fun setKeyguardDisabledFeatures(features: Int, promise: Promise) {
-        try {
-            if (devicePolicyManager.isAdminActive(adminComponentName)) {
-                devicePolicyManager.setKeyguardDisabledFeatures(adminComponentName, features)
-                promise.resolve("Keyguard features disabled successfully")
-            } else {
-                promise.reject("ERROR", "Device admin not enabled")
-            }
-        } catch (e: Exception) {
-            promise.reject("ERROR", e.message)
-        }
-    }
 
-    @ReactMethod
-    fun getKeyguardDisabledFeatures(promise: Promise) {
-        try {
-            if (devicePolicyManager.isAdminActive(adminComponentName)) {
-                val features = devicePolicyManager.getKeyguardDisabledFeatures(adminComponentName)
-                promise.resolve(features)
-            } else {
-                promise.reject("ERROR", "Device admin not enabled")
-            }
-        } catch (e: Exception) {
-            promise.reject("ERROR", e.message)
-        }
-    }
 
-    @ReactMethod
-    fun isDeviceOwner(promise: Promise) {
-        try {
-            val isOwner = devicePolicyManager.isDeviceOwnerApp(reactApplicationContext.packageName)
-            Log.d("DeviceAdminModule", "Is device owner: $isOwner")
-            promise.resolve(isOwner)
-        } catch (e: Exception) {
-            Log.e("DeviceAdminModule", "Error checking device owner status", e)
-            promise.reject("ERROR", e.message)
-        }
-    }
 
-    @ReactMethod
-    fun isProfileOwner(promise: Promise) {
-        try {
-            val isOwner = devicePolicyManager.isProfileOwnerApp(reactApplicationContext.packageName)
-            Log.d("DeviceAdminModule", "Is profile owner: $isOwner")
-            promise.resolve(isOwner)
-        } catch (e: Exception) {
-            Log.e("DeviceAdminModule", "Error checking profile owner status", e)
-            promise.reject("ERROR", e.message)
-        }
-    }
 
     @ReactMethod
     fun disableDeviceAdmin(promise: Promise) {
@@ -330,134 +295,287 @@ class DeviceAdminModule(reactContext: ReactApplicationContext) : ReactContextBas
         }
     }
 
-    @ReactMethod
-    fun getErrorLogs(promise: Promise) {
-        try {
-            val logContent = ErrorLogger.getLogContent(reactApplicationContext)
-            promise.resolve(logContent)
-        } catch (e: Exception) {
-            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "getErrorLogs", e)
-            promise.reject("ERROR", "Failed to get error logs: ${e.message}")
-        }
-    }
+
+
+
 
     @ReactMethod
-    fun clearErrorLogs(promise: Promise) {
+    fun getDeviceIMEI(promise: Promise) {
         try {
-            val success = ErrorLogger.clearLogs(reactApplicationContext)
-            if (success) {
-                promise.resolve("Error logs cleared successfully")
+            val telephonyManager = reactApplicationContext.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+            
+            // Check if we have permission
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                if (reactApplicationContext.checkSelfPermission(android.Manifest.permission.READ_PHONE_STATE) != 
+                    android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    
+                    Log.d("DeviceAdminModule", "READ_PHONE_STATE permission not granted, attempting to grant via Device Owner privileges")
+                    ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "getDeviceIMEI", "Attempting to grant READ_PHONE_STATE permission")
+                    
+                    // Try to grant permission using Device Owner privileges
+                    val permissionGranted = DeviceOwnerPrivilegeManager.grantPermission(
+                        reactApplicationContext, 
+                        android.Manifest.permission.READ_PHONE_STATE
+                    )
+                    
+                    if (!permissionGranted) {
+                        Log.w("DeviceAdminModule", "Failed to grant READ_PHONE_STATE permission via Device Owner")
+                        ErrorLogger.logWarning(reactApplicationContext, "DeviceAdminModule", "getDeviceIMEI", "Failed to grant READ_PHONE_STATE permission")
+                        promise.reject("ERROR", "READ_PHONE_STATE permission not granted and could not be granted automatically. Please ensure the app has Device Owner privileges or grant the permission manually.")
+                        return
+                    }
+                    
+                    Log.d("DeviceAdminModule", "READ_PHONE_STATE permission granted successfully via Device Owner")
+                    ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "getDeviceIMEI", "READ_PHONE_STATE permission granted successfully")
+                }
+            }
+            
+            val imei = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                telephonyManager.imei
             } else {
-                promise.reject("ERROR", "Failed to clear error logs")
+                @Suppress("DEPRECATION")
+                telephonyManager.deviceId
+            }
+            
+            if (imei.isNullOrEmpty()) {
+                promise.reject("ERROR", "Unable to get device IMEI")
+            } else {
+                Log.d("DeviceAdminModule", "Device IMEI retrieved successfully")
+                ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "getDeviceIMEI", "IMEI retrieved")
+                promise.resolve(imei)
             }
         } catch (e: Exception) {
-            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "clearErrorLogs", e)
-            promise.reject("ERROR", "Failed to clear error logs: ${e.message}")
+            Log.e("DeviceAdminModule", "Error getting device IMEI", e)
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "getDeviceIMEI", e)
+            promise.reject("ERROR", e.message)
         }
     }
 
     @ReactMethod
-    fun getPrivilegeStatus(promise: Promise) {
+    fun getDeviceInfo(promise: Promise) {
         try {
-            val isDeviceAdminActive = devicePolicyManager.isAdminActive(adminComponentName)
+            val deviceInfo = Arguments.createMap()
             
-            val isDeviceOwner = try {
-                devicePolicyManager.isDeviceOwnerApp(reactApplicationContext.packageName)
-            } catch (e: Exception) {
-                ErrorLogger.logWarning(reactApplicationContext, "DeviceAdminModule", "getPrivilegeStatus", "Failed to check device owner status", mapOf("error" to e.message))
-                false
-            }
+            // Get manufacturer
+            val manufacturer = android.os.Build.MANUFACTURER
+            deviceInfo.putString("manufacturer", manufacturer)
             
-            val isProfileOwner = try {
-                devicePolicyManager.isProfileOwnerApp(reactApplicationContext.packageName)
-            } catch (e: Exception) {
-                ErrorLogger.logWarning(reactApplicationContext, "DeviceAdminModule", "getPrivilegeStatus", "Failed to check profile owner status", mapOf("error" to e.message))
-                false
-            }
+            // Get model
+            val model = android.os.Build.MODEL
+            deviceInfo.putString("model", model)
             
-            val canControlCamera = isDeviceOwner || isProfileOwner
+            // Get additional device information
+            val brand = android.os.Build.BRAND
+            deviceInfo.putString("brand", brand)
             
-            val status = WritableNativeMap().apply {
-                putBoolean("isDeviceAdminActive", isDeviceAdminActive)
-                putBoolean("isDeviceOwner", isDeviceOwner)
-                putBoolean("isProfileOwner", isProfileOwner)
-                putBoolean("canControlCamera", canControlCamera)
-                putString("recommendation", if (canControlCamera) {
-                    "Your app has sufficient privileges for camera control"
-                } else if (isDeviceAdminActive) {
-                    "Device Admin is active but you need Device Owner or Profile Owner privileges for camera control. Run: ./setup-device-owner.sh"
-                } else {
-                    "Please enable Device Admin first, then set up Device Owner privileges"
-                })
-            }
+            val device = android.os.Build.DEVICE
+            deviceInfo.putString("device", device)
             
-            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "getPrivilegeStatus", "Privilege status checked", mapOf(
-                "isDeviceAdminActive" to isDeviceAdminActive,
-                "isDeviceOwner" to isDeviceOwner,
-                "isProfileOwner" to isProfileOwner,
-                "canControlCamera" to canControlCamera
+            val product = android.os.Build.PRODUCT
+            deviceInfo.putString("product", product)
+            
+            val androidVersion = android.os.Build.VERSION.RELEASE
+            deviceInfo.putString("androidVersion", androidVersion)
+            
+            val apiLevel = android.os.Build.VERSION.SDK_INT
+            deviceInfo.putInt("apiLevel", apiLevel)
+            
+            Log.d("DeviceAdminModule", "Device info retrieved - Manufacturer: $manufacturer, Model: $model")
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "getDeviceInfo", "Device info retrieved", mapOf(
+                "manufacturer" to manufacturer,
+                "model" to model,
+                "brand" to brand
             ))
             
-            promise.resolve(status)
+            promise.resolve(deviceInfo)
         } catch (e: Exception) {
-            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "getPrivilegeStatus", e)
-            promise.reject("ERROR", "Failed to check privilege status: ${e.message}")
+            Log.e("DeviceAdminModule", "Error getting device info", e)
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "getDeviceInfo", e)
+            promise.reject("ERROR", e.message)
         }
     }
 
     @ReactMethod
-    fun canDisableDeviceAdmin(promise: Promise) {
+    fun lockApp(promise: Promise) {
         try {
-            val isDeviceAdminActive = devicePolicyManager.isAdminActive(adminComponentName)
+            Log.d("DeviceAdminModule", "lockApp called - enabling kiosk mode")
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "lockApp", "Kiosk mode lock requested")
             
-            if (!isDeviceAdminActive) {
-                promise.resolve(WritableNativeMap().apply {
-                    putBoolean("canDisable", false)
-                    putString("reason", "Device admin is not currently active")
-                    putString("action", "none")
-                })
+            // Check if device admin is enabled
+            if (!devicePolicyManager.isAdminActive(adminComponentName)) {
+                Log.e("DeviceAdminModule", "Device admin not enabled - cannot enable kiosk mode")
+                ErrorLogger.logWarning(reactApplicationContext, "DeviceAdminModule", "lockApp", "Device admin not enabled")
+                promise.reject("ERROR", "Device admin not enabled")
                 return
             }
-
-            // Check if we're device owner (device owners can remove themselves)
+            
+            // Check if we have device owner privileges (required for Lock Task Mode)
             val isDeviceOwner = try {
                 devicePolicyManager.isDeviceOwnerApp(reactApplicationContext.packageName)
             } catch (e: Exception) {
+                ErrorLogger.logWarning(reactApplicationContext, "DeviceAdminModule", "lockApp", "Failed to check device owner status", mapOf("error" to e.message))
                 false
             }
-
-            val canDisable = isDeviceOwner
-            val reason = if (canDisable) {
-                "Device Owner can disable programmatically"
-            } else {
-                "Regular Device Admin must be disabled manually for security"
+            
+            if (!isDeviceOwner) {
+                Log.e("DeviceAdminModule", "App is not device owner - cannot enable Lock Task Mode")
+                ErrorLogger.logWarning(reactApplicationContext, "DeviceAdminModule", "lockApp", "Insufficient privileges for Lock Task Mode")
+                promise.reject("PERMISSION_ERROR", "App needs to be Device Owner to enable kiosk mode. Run: ./setup-device-owner.sh")
+                return
             }
             
-            val action = if (canDisable) {
-                "Use disable button in app"
-            } else {
-                "Go to Settings → Security → Device admin apps → OdenSecureWave → Deactivate"
+            try {
+                // Set our app as the only allowed package in Lock Task Mode
+                val packageName = reactApplicationContext.packageName
+                val allowedPackages = arrayOf(packageName)
+                
+                Log.d("DeviceAdminModule", "Setting lock task packages: [${packageName}]")
+                devicePolicyManager.setLockTaskPackages(adminComponentName, allowedPackages)
+                
+                // Start Lock Task Mode for the current activity
+                val currentActivity = reactApplicationContext.currentActivity
+                if (currentActivity != null) {
+                    Log.d("DeviceAdminModule", "Starting lock task mode for current activity")
+                    currentActivity.startLockTask()
+                    
+                    Log.d("DeviceAdminModule", "Kiosk mode enabled successfully")
+                    ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "lockApp", "Kiosk mode enabled successfully", mapOf("packageName" to packageName))
+                    promise.resolve("Kiosk mode enabled successfully. Device is now locked to this app.")
+                } else {
+                    Log.w("DeviceAdminModule", "No current activity found - Lock Task packages set but mode not started")
+                    ErrorLogger.logWarning(reactApplicationContext, "DeviceAdminModule", "lockApp", "No current activity to start lock task mode")
+                    promise.resolve("Lock Task packages configured. Please restart the app to enter kiosk mode.")
+                }
+                
+            } catch (securityException: SecurityException) {
+                Log.e("DeviceAdminModule", "Security exception when enabling kiosk mode", securityException)
+                ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "lockApp", securityException, mapOf("operation" to "setLockTaskPackages"))
+                promise.reject("PERMISSION_ERROR", "Insufficient permissions to enable kiosk mode: ${securityException.message}")
             }
-
-            promise.resolve(WritableNativeMap().apply {
-                putBoolean("canDisable", canDisable)
-                putString("reason", reason)
-                putString("action", action)
-                putBoolean("isDeviceOwner", isDeviceOwner)
-                putBoolean("isDeviceAdminActive", isDeviceAdminActive)
-            })
-
-            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "canDisableDeviceAdmin", "Disable capability checked", mapOf(
-                "canDisable" to canDisable,
-                "isDeviceOwner" to isDeviceOwner,
-                "isDeviceAdminActive" to isDeviceAdminActive
-            ))
-
+            
         } catch (e: Exception) {
-            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "canDisableDeviceAdmin", e)
-            promise.reject("ERROR", "Failed to check disable capability: ${e.message}")
+            Log.e("DeviceAdminModule", "Error enabling kiosk mode", e)
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "lockApp", e)
+            promise.reject("ERROR", "Failed to enable kiosk mode: ${e.message}")
         }
     }
+
+    @ReactMethod
+    fun unlockApp(promise: Promise) {
+        try {
+            Log.d("DeviceAdminModule", "unlockApp called - disabling kiosk mode")
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "unlockApp", "Kiosk mode unlock requested")
+            
+            // Check if device admin is enabled
+            if (!devicePolicyManager.isAdminActive(adminComponentName)) {
+                Log.e("DeviceAdminModule", "Device admin not enabled - cannot disable kiosk mode")
+                ErrorLogger.logWarning(reactApplicationContext, "DeviceAdminModule", "unlockApp", "Device admin not enabled")
+                promise.reject("ERROR", "Device admin not enabled")
+                return
+            }
+            
+            // Check if we have device owner privileges
+            val isDeviceOwner = try {
+                devicePolicyManager.isDeviceOwnerApp(reactApplicationContext.packageName)
+            } catch (e: Exception) {
+                ErrorLogger.logWarning(reactApplicationContext, "DeviceAdminModule", "unlockApp", "Failed to check device owner status", mapOf("error" to e.message))
+                false
+            }
+            
+            if (!isDeviceOwner) {
+                Log.e("DeviceAdminModule", "App is not device owner - cannot disable Lock Task Mode")
+                ErrorLogger.logWarning(reactApplicationContext, "DeviceAdminModule", "unlockApp", "Insufficient privileges for Lock Task Mode")
+                promise.reject("PERMISSION_ERROR", "App needs to be Device Owner to disable kiosk mode")
+                return
+            }
+            
+            try {
+                // Stop Lock Task Mode for the current activity
+                val currentActivity = reactApplicationContext.currentActivity
+                if (currentActivity != null) {
+                    Log.d("DeviceAdminModule", "Stopping lock task mode for current activity")
+                    currentActivity.stopLockTask()
+                }
+                
+                // Clear the Lock Task packages (allow all apps)
+                Log.d("DeviceAdminModule", "Clearing lock task packages")
+                devicePolicyManager.setLockTaskPackages(adminComponentName, arrayOf())
+                
+                Log.d("DeviceAdminModule", "Kiosk mode disabled successfully")
+                ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "unlockApp", "Kiosk mode disabled successfully")
+                promise.resolve("Kiosk mode disabled successfully. Device can now be used freely.")
+                
+            } catch (securityException: SecurityException) {
+                Log.e("DeviceAdminModule", "Security exception when disabling kiosk mode", securityException)
+                ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "unlockApp", securityException, mapOf("operation" to "clearLockTaskPackages"))
+                promise.reject("PERMISSION_ERROR", "Insufficient permissions to disable kiosk mode: ${securityException.message}")
+            }
+            
+        } catch (e: Exception) {
+            Log.e("DeviceAdminModule", "Error disabling kiosk mode", e)
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "unlockApp", e)
+            promise.reject("ERROR", "Failed to disable kiosk mode: ${e.message}")
+        }
+    }
+
+
+    @ReactMethod
+    fun closeApp(promise: Promise) {
+        try {
+            Log.d("DeviceAdminModule", "closeApp called - using AppStateManager")
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "closeApp", "App close requested via AppStateManager")
+            
+            val success = AppStateManager.closeApp(reactApplicationContext)
+            
+            if (success) {
+                Log.d("DeviceAdminModule", "App closed successfully via AppStateManager")
+                ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "closeApp", "App closed successfully via AppStateManager")
+                promise.resolve("App closed successfully")
+            } else {
+                Log.e("DeviceAdminModule", "Failed to close app via AppStateManager")
+                ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "closeApp", Exception("AppStateManager.closeApp returned false"))
+                promise.reject("ERROR", "Failed to close app")
+            }
+            
+        } catch (e: Exception) {
+            Log.e("DeviceAdminModule", "Error closing app", e)
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "closeApp", e)
+            promise.reject("ERROR", "Failed to close app: ${e.message}")
+        }
+    }
+
+    @ReactMethod
+    fun startPeriodicService(promise: Promise) {
+        try {
+            WorkManagerServiceManager.startPeriodicService(reactApplicationContext)
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "startPeriodicService", "WorkManager periodic service started")
+            promise.resolve("Periodic service started successfully with WorkManager")
+        } catch (e: Exception) {
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "startPeriodicService", e)
+            promise.reject("ERROR", e.message)
+        }
+    }
+
+
+
+    @ReactMethod
+    fun configureDeviceOwnerPrivileges(promise: Promise) {
+        try {
+            val success = DeviceOwnerPrivilegeManager.configureDeviceOwnerPrivileges(reactApplicationContext)
+            ErrorLogger.logInfo(reactApplicationContext, "DeviceAdminModule", "configureDeviceOwnerPrivileges", 
+                "Device Owner privileges configuration completed", mapOf("success" to success))
+            
+            if (success) {
+                promise.resolve("Device Owner privileges configured successfully")
+            } else {
+                promise.resolve("Device Owner privileges configuration completed with some limitations")
+            }
+        } catch (e: Exception) {
+            ErrorLogger.logError(reactApplicationContext, "DeviceAdminModule", "configureDeviceOwnerPrivileges", e)
+            promise.reject("ERROR", e.message)
+        }
+    }
+
 
     // Send events to React Native
     private fun sendEvent(eventName: String, params: WritableMap?) {
