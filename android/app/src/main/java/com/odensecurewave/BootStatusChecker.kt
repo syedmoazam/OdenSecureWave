@@ -93,69 +93,69 @@ class BootStatusReceiver : BroadcastReceiver() {
     }
     
     private suspend fun performDelayedBootCheck(context: Context) {
-        try {
-            Log.d(TAG, "Performing delayed boot Firebase status check")
-            ErrorLogger.logInfo(context, TAG, "performDelayedBootCheck", "Starting delayed Firebase status check")
+        // try {
+        //     Log.d(TAG, "Performing delayed boot Firebase status check")
+        //     ErrorLogger.logInfo(context, TAG, "performDelayedBootCheck", "Starting delayed Firebase status check")
             
-            // Check if Firebase is available
-            if (!FirebaseDeviceStatusManager.isFirebaseAvailable()) {
-                Log.w(TAG, "Firebase is not available for delayed boot check")
-                ErrorLogger.logWarning(context, TAG, "performDelayedBootCheck", "Firebase is not available")
-                return
-            }
+        //     // Check if Firebase is available
+        //     if (!FirebaseDeviceStatusManager.isFirebaseAvailable()) {
+        //         Log.w(TAG, "Firebase is not available for delayed boot check")
+        //         ErrorLogger.logWarning(context, TAG, "performDelayedBootCheck", "Firebase is not available")
+        //         return
+        //     }
             
-            // Get device IMEI
-            val deviceId = FirebaseDeviceStatusManager.getDeviceImei(context)
-            if (deviceId == null) {
-                Log.w(TAG, "Could not get device IMEI for delayed boot check")
-                ErrorLogger.logWarning(context, TAG, "performDelayedBootCheck", "Could not get device IMEI")
-                return
-            }
+        //     // Get device IMEI
+        //     val deviceId = FirebaseDeviceStatusManager.getDeviceImei(context)
+        //     if (deviceId == null) {
+        //         Log.w(TAG, "Could not get device IMEI for delayed boot check")
+        //         ErrorLogger.logWarning(context, TAG, "performDelayedBootCheck", "Could not get device IMEI")
+        //         return
+        //     }
             
-            Log.d(TAG, "Fetching device status from Firebase for delayed boot check")
+        //     Log.d(TAG, "Fetching device status from Firebase for delayed boot check")
             
-            // Fetch device status from Firebase
-            val deviceStatus = FirebaseDeviceStatusManager.getDeviceStatus(context, deviceId)
-            Log.d(TAG, "Device status from Firebase in delayed boot check: $deviceStatus")
+        //     // Fetch device status from Firebase
+        //     val deviceStatus = FirebaseDeviceStatusManager.getDeviceStatus(context, deviceId)
+        //     Log.d(TAG, "Device status from Firebase in delayed boot check: $deviceStatus")
             
-            when (deviceStatus) {
-                "lock" -> {
-                    Log.d(TAG, "Device status is 'lock' in delayed boot check - launching app")
-                    ErrorLogger.logInfo(context, TAG, "performDelayedBootCheck", 
-                        "Device status is 'lock' - launching app")
+        //     when (deviceStatus) {
+        //         "lock" -> {
+        //             Log.d(TAG, "Device status is 'lock' in delayed boot check - launching app")
+        //             ErrorLogger.logInfo(context, TAG, "performDelayedBootCheck", 
+        //                 "Device status is 'lock' - launching app")
                     
-                    // Launch the app
-                    val appLaunched = AppStateManager.launchApp(context)
-                    if (appLaunched) {
-                        Log.d(TAG, "App launched successfully in delayed boot check")
-                        ErrorLogger.logInfo(context, TAG, "performDelayedBootCheck", 
-                            "App launched successfully for lock status")
-                    } else {
-                        Log.w(TAG, "Failed to launch app in delayed boot check")
-                        ErrorLogger.logWarning(context, TAG, "performDelayedBootCheck", 
-                            "Failed to launch app for lock status")
-                    }
-                }
-                "active" -> {
-                    Log.d(TAG, "Device status is 'active' in delayed boot check - no action needed")
-                    ErrorLogger.logInfo(context, TAG, "performDelayedBootCheck", 
-                        "Device status is 'active' - no action needed")
-                }
-                null -> {
-                    Log.w(TAG, "Could not retrieve device status from Firebase in delayed boot check")
-                    ErrorLogger.logWarning(context, TAG, "performDelayedBootCheck", 
-                        "Could not retrieve device status from Firebase")
-                }
-                else -> {
-                    Log.d(TAG, "Device status is '$deviceStatus' in delayed boot check - no special action")
-                    ErrorLogger.logInfo(context, TAG, "performDelayedBootCheck", 
-                        "Device status retrieved", mapOf("status" to deviceStatus))
-                }
-            }
+        //             // Launch the app
+        //             val appLaunched = AppStateManager.launchApp(context)
+        //             if (appLaunched) {
+        //                 Log.d(TAG, "App launched successfully in delayed boot check")
+        //                 ErrorLogger.logInfo(context, TAG, "performDelayedBootCheck", 
+        //                     "App launched successfully for lock status")
+        //             } else {
+        //                 Log.w(TAG, "Failed to launch app in delayed boot check")
+        //                 ErrorLogger.logWarning(context, TAG, "performDelayedBootCheck", 
+        //                     "Failed to launch app for lock status")
+        //             }
+        //         }
+        //         "active" -> {
+        //             Log.d(TAG, "Device status is 'active' in delayed boot check - no action needed")
+        //             ErrorLogger.logInfo(context, TAG, "performDelayedBootCheck", 
+        //                 "Device status is 'active' - no action needed")
+        //         }
+        //         null -> {
+        //             Log.w(TAG, "Could not retrieve device status from Firebase in delayed boot check")
+        //             ErrorLogger.logWarning(context, TAG, "performDelayedBootCheck", 
+        //                 "Could not retrieve device status from Firebase")
+        //         }
+        //         else -> {
+        //             Log.d(TAG, "Device status is '$deviceStatus' in delayed boot check - no special action")
+        //             ErrorLogger.logInfo(context, TAG, "performDelayedBootCheck", 
+        //                 "Device status retrieved", mapOf("status" to deviceStatus))
+        //         }
+        //     }
             
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in delayed boot Firebase check", e)
-            ErrorLogger.logError(context, TAG, "performDelayedBootCheck", e)
-        }
+        // } catch (e: Exception) {
+        //     Log.e(TAG, "Error in delayed boot Firebase check", e)
+        //     ErrorLogger.logError(context, TAG, "performDelayedBootCheck", e)
+        // }
     }
 }

@@ -12,8 +12,8 @@ object AppStateManager {
     private const val TAG = "AppStateManager"
     
     /**
-     * Check if the app is currently running (foreground or background)
-     * Returns true if the app is running, false otherwise
+     * Check if the app is currently running (foreground or background with visible activities)
+     * Returns true if the main app UI is running, false if only background services are running
      */
     fun isAppRunning(context: Context): Boolean {
         return try {
@@ -22,20 +22,35 @@ object AppStateManager {
             val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
             val packageName = context.packageName
             
-            // Method 1: Check running app processes
+            // Method 1: Check running app processes for FOREGROUND or VISIBLE apps only
             val runningProcesses = activityManager.runningAppProcesses
             if (runningProcesses != null) {
                 for (processInfo in runningProcesses) {
                     if (processInfo.processName == packageName) {
-                        Log.d(TAG, "App is running - found in running processes")
-                        ErrorLogger.logInfo(context, TAG, "isAppRunning", "App is running - found in running processes",
-                            mapOf("processName" to processInfo.processName, "importance" to processInfo.importance))
-                        return true
+                        // Only consider the app "running" if it's in foreground or visible state
+                        // This excludes background services like PeriodicWorker
+                        val isAppActive = when (processInfo.importance) {
+                            ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND -> true
+                            ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE -> true
+                            ActivityManager.RunningAppProcessInfo.IMPORTANCE_TOP_SLEEPING -> true
+                            else -> false
+                        }
+                        
+                        if (isAppActive) {
+                            Log.d(TAG, "App is running - found in active state (importance: ${processInfo.importance})")
+                            ErrorLogger.logInfo(context, TAG, "isAppRunning", "App is running - found in active state",
+                                mapOf("processName" to processInfo.processName, "importance" to processInfo.importance))
+                            return true
+                        } else {
+                            Log.d(TAG, "App process found but only in background (importance: ${processInfo.importance})")
+                            ErrorLogger.logInfo(context, TAG, "isAppRunning", "App process found but only in background",
+                                mapOf("processName" to processInfo.processName, "importance" to processInfo.importance))
+                        }
                     }
                 }
             }
             
-            // Method 2: Check if any activities are running
+            // Method 2: Check if any activities are running (as fallback)
             val runningTasks = try {
                 @Suppress("DEPRECATION")
                 activityManager.getRunningTasks(1)
@@ -54,7 +69,7 @@ object AppStateManager {
                 }
             }
             
-            Log.d(TAG, "App is not currently running")
+            Log.d(TAG, "App is not currently running (only background services may be active)")
             ErrorLogger.logInfo(context, TAG, "isAppRunning", "App is not currently running")
             return false
             

@@ -74,19 +74,9 @@ class PeriodicWorker(
             val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
             Log.d(TAG, "Performing periodic work at: $timestamp")
             
-            // REQUIREMENT 1: Only execute if app is NOT currently running
-            if (AppStateManager.isAppRunning(applicationContext)) {
-                Log.d(TAG, "App is currently running - skipping periodic work")
-                ErrorLogger.logInfo(applicationContext, TAG, "performPeriodicWork", "App is running - skipping periodic work")
-                return
-            }
-            
-            Log.d(TAG, "App is not running - proceeding with periodic work")
-            ErrorLogger.logInfo(applicationContext, TAG, "performPeriodicWork", "App is not running - proceeding with periodic work")
-            
-            // REQUIREMENT 2: Fetch device status from Firebase and handle accordingly
+            // Execute the periodic work flow
             runBlocking {
-                checkDeviceStatusAndAct()
+                executePeriodicWorkFlow()
             }
             
             ErrorLogger.logInfo(applicationContext, TAG, "performPeriodicWork", "Periodic work completed", 
@@ -100,110 +90,134 @@ class PeriodicWorker(
     }
     
     /**
-     * Check device status from Firebase and take appropriate action
+     * Execute the periodic work flow according to requirements:
+     * 1. Check if device record exists in Firebase - if not, do nothing
+     * 2. Update device location to Firebase
+     * 3. Check if app is running - if yes, do nothing
+     * 4. If app not running, check device status and launch app if status is 'lock'
      */
-    private suspend fun checkDeviceStatusAndAct() {
+    private suspend fun executePeriodicWorkFlow() {
         try {
-            Log.d(TAG, "Starting device status check and action")
-            ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "Starting device status check")
+            Log.d(TAG, "Starting periodic work flow")
+            ErrorLogger.logInfo(applicationContext, TAG, "executePeriodicWorkFlow", "Starting periodic work flow")
             
-            // Step 1: Check if app is running
-            if (AppStateManager.isAppRunning(applicationContext)) {
-                Log.d(TAG, "App is running - skipping device status check")
-                ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "App is running - skipping check")
-                return
-            }
-            
-            Log.d(TAG, "App is not running - proceeding with device status check")
-            
-            // Step 2: Get device IMEI number
+            // Step 1: Get device IMEI number (needed for Firebase operations)
             val deviceImei = getDeviceImei()
             if (deviceImei == null) {
-                Log.e(TAG, "Could not retrieve device IMEI - aborting status check")
-                ErrorLogger.logError(applicationContext, TAG, "checkDeviceStatusAndAct", Exception("Could not retrieve device IMEI"))
+                Log.e(TAG, "Could not retrieve device IMEI - aborting periodic work")
+                ErrorLogger.logError(applicationContext, TAG, "executePeriodicWorkFlow", Exception("Could not retrieve device IMEI"))
                 return
             }
             
             Log.d(TAG, "Device IMEI retrieved: $deviceImei")
-            ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "Device IMEI retrieved", mapOf("imei" to deviceImei))
             
-            // Step 3: Get device status from Firebase
+            // Step 2: Check if device record exists in Firebase
+            val devicePath = "monitoredDevices/$deviceImei"
+            val recordExists = FirebaseUtils.dataExists(applicationContext, devicePath)
+            
+            if (!recordExists) {
+                Log.d(TAG, "Device record not found in Firebase - skipping periodic work")
+                ErrorLogger.logInfo(applicationContext, TAG, "executePeriodicWorkFlow", 
+                    "Device record not found in Firebase - skipping periodic work", 
+                    mapOf("imei" to deviceImei, "path" to devicePath))
+                return
+            }
+            
+            Log.d(TAG, "Device record found in Firebase - proceeding with periodic work")
+            ErrorLogger.logInfo(applicationContext, TAG, "executePeriodicWorkFlow", 
+                "Device record found in Firebase", mapOf("imei" to deviceImei))
+            
+            // Step 3: Always update device location to Firebase
+            updateDeviceLocation(deviceImei)
+            
+            // Step 4: Check if app is running
+            if (AppStateManager.isAppRunning(applicationContext)) {
+                Log.d(TAG, "App is currently running - no further action required")
+                ErrorLogger.logInfo(applicationContext, TAG, "executePeriodicWorkFlow", "App is running - no further action")
+                return
+            }
+            
+            Log.d(TAG, "App is not running - checking device status")
+            
+            // Step 5: Get device status from Firebase
             val referencePath = "monitoredDevices/$deviceImei/status"
             val deviceStatus = FirebaseUtils.getData(applicationContext, referencePath)
             
             if (deviceStatus == null) {
                 Log.w(TAG, "Could not retrieve device status from Firebase")
-                ErrorLogger.logWarning(applicationContext, TAG, "checkDeviceStatusAndAct", "Could not retrieve device status", mapOf("path" to referencePath))
+                ErrorLogger.logWarning(applicationContext, TAG, "executePeriodicWorkFlow", "Could not retrieve device status", mapOf("path" to referencePath))
                 return
             }
             
             val statusString = deviceStatus.toString()
-            Log.d(TAG, "Device status retrieved from Firebase: $statusString")
-            ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "Device status retrieved", mapOf("status" to statusString, "imei" to deviceImei))
+            Log.d(TAG, "Device status retrieved: $statusString")
+            ErrorLogger.logInfo(applicationContext, TAG, "executePeriodicWorkFlow", "Device status retrieved", mapOf("status" to statusString, "imei" to deviceImei))
             
-            // Step 4: Handle status based actions
-            when (statusString.lowercase()) {
-                "active" -> {
-                    Log.d(TAG, "Device status is 'active' - no action required")
-                    ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "Device status is active - no action required")
-                    return
+            // Step 6: Launch app if status is 'lock'
+            if (statusString.lowercase() == "lock") {
+                Log.d(TAG, "Device status is 'lock' - launching app")
+                ErrorLogger.logInfo(applicationContext, TAG, "executePeriodicWorkFlow", "Device status is lock - launching app")
+                
+                val appLaunched = AppStateManager.launchApp(applicationContext)
+                if (appLaunched) {
+                    Log.d(TAG, "App launched successfully")
+                    ErrorLogger.logInfo(applicationContext, TAG, "executePeriodicWorkFlow", "App launched successfully", mapOf("imei" to deviceImei))
+                } else {
+                    Log.e(TAG, "Failed to launch app")
+                    ErrorLogger.logError(applicationContext, TAG, "executePeriodicWorkFlow", Exception("Failed to launch app"), mapOf("imei" to deviceImei))
                 }
-                "lock" -> {
-                    Log.d(TAG, "Device status is 'lock' - proceeding with location update and app launch")
-                    ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "Device status is lock - proceeding with actions")
-                    
-                    // Step 5: Get current location
-                    val locationData = DeviceLocationManager.getLocation(applicationContext)
-                    if (locationData == null) {
-                        Log.w(TAG, "Could not retrieve device location")
-                        ErrorLogger.logWarning(applicationContext, TAG, "checkDeviceStatusAndAct", "Could not retrieve device location")
-                    } else {
-                        Log.d(TAG, "Location retrieved: $locationData")
-                        ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "Location retrieved successfully", 
-                            mapOf("latitude" to locationData.latitude, "longitude" to locationData.longitude))
-                        
-                        // Step 6: Update location in Firebase
-                        val locationPath = "monitoredDevices/$deviceImei/lastLocation"
-                        val locationUpdateData = mapOf(
-                            "latitude" to locationData.latitude,
-                            "longitude" to locationData.longitude,
-                            "accuracy" to locationData.accuracy,
-                            "timestamp" to locationData.timestamp,
-                            "provider" to locationData.provider,
-                            "updatedAt" to System.currentTimeMillis()
-                        )
-                        
-                        val locationUpdated = FirebaseUtils.updateData(applicationContext, locationPath, locationUpdateData)
-                        if (locationUpdated) {
-                            Log.d(TAG, "Location updated in Firebase successfully")
-                            ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "Location updated in Firebase", 
-                                mapOf("path" to locationPath, "imei" to deviceImei))
-                        } else {
-                            Log.w(TAG, "Failed to update location in Firebase")
-                            ErrorLogger.logWarning(applicationContext, TAG, "checkDeviceStatusAndAct", "Failed to update location in Firebase")
-                        }
-                    }
-                    
-                    // Step 7: Launch the app
-                    val appLaunched = AppStateManager.launchApp(applicationContext)
-                    if (appLaunched) {
-                        Log.d(TAG, "App launched successfully")
-                        ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "App launched successfully", mapOf("imei" to deviceImei))
-                    } else {
-                        Log.e(TAG, "Failed to launch app")
-                        ErrorLogger.logError(applicationContext, TAG, "checkDeviceStatusAndAct", Exception("Failed to launch app"), mapOf("imei" to deviceImei))
-                    }
-                }
-                else -> {
-                    Log.d(TAG, "Unknown device status: $statusString - no action taken")
-                    ErrorLogger.logInfo(applicationContext, TAG, "checkDeviceStatusAndAct", "Unknown device status", 
-                        mapOf("status" to statusString, "imei" to deviceImei))
-                }
+            } else {
+                Log.d(TAG, "Device status is '$statusString' - no app launch required")
+                ErrorLogger.logInfo(applicationContext, TAG, "executePeriodicWorkFlow", "No app launch required", mapOf("status" to statusString))
             }
             
         } catch (e: Exception) {
-            Log.e(TAG, "Error in checkDeviceStatusAndAct", e)
-            ErrorLogger.logError(applicationContext, TAG, "checkDeviceStatusAndAct", e)
+            Log.e(TAG, "Error in executePeriodicWorkFlow", e)
+            ErrorLogger.logError(applicationContext, TAG, "executePeriodicWorkFlow", e)
+        }
+    }
+    
+    /**
+     * Update device location to Firebase
+     */
+    private suspend fun updateDeviceLocation(deviceImei: String) {
+        try {
+            Log.d(TAG, "Updating device location")
+            
+            val locationData = DeviceLocationManager.getLocation(applicationContext)
+            if (locationData == null) {
+                Log.w(TAG, "Could not retrieve device location")
+                ErrorLogger.logWarning(applicationContext, TAG, "updateDeviceLocation", "Could not retrieve device location")
+                return
+            }
+            
+            Log.d(TAG, "Location retrieved successfully")
+            ErrorLogger.logInfo(applicationContext, TAG, "updateDeviceLocation", "Location retrieved successfully", 
+                mapOf("latitude" to locationData.latitude, "longitude" to locationData.longitude))
+            
+            val locationPath = "monitoredDevices/$deviceImei/lastLocation"
+            val locationUpdateData = mapOf(
+                "latitude" to locationData.latitude,
+                "longitude" to locationData.longitude,
+                "accuracy" to locationData.accuracy,
+                "timestamp" to locationData.timestamp,
+                "provider" to locationData.provider,
+                "updatedAt" to System.currentTimeMillis()
+            )
+            
+            val locationUpdated = FirebaseUtils.updateData(applicationContext, locationPath, locationUpdateData)
+            if (locationUpdated) {
+                Log.d(TAG, "Location updated in Firebase successfully")
+                ErrorLogger.logInfo(applicationContext, TAG, "updateDeviceLocation", "Location updated in Firebase", 
+                    mapOf("path" to locationPath, "imei" to deviceImei))
+            } else {
+                Log.w(TAG, "Failed to update location in Firebase")
+                ErrorLogger.logWarning(applicationContext, TAG, "updateDeviceLocation", "Failed to update location in Firebase")
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating device location", e)
+            ErrorLogger.logError(applicationContext, TAG, "updateDeviceLocation", e)
         }
     }
     

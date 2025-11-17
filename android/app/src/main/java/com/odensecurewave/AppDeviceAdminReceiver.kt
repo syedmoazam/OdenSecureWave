@@ -138,7 +138,7 @@ class AppDeviceAdminReceiver : DeviceAdminReceiver() {
                         
                         // Initialize the WorkManager periodic service on boot
                         try {
-                            WorkManagerServiceManager.initializeService(context)
+                            WorkManagerServiceManager.initializeService(context.applicationContext)
                             log("WorkManager periodic service initialized on boot")
                             ErrorLogger.logInfo(context, TAG, "onReceive", "WorkManager periodic service initialized on boot")
                         } catch (serviceException: Exception) {
@@ -349,79 +349,79 @@ class AppDeviceAdminReceiver : DeviceAdminReceiver() {
      * This handles the requirement for device restart behavior
      */
     private fun checkFirebaseStatusOnBoot(context: Context) {
-        try {
-            log("Checking Firebase status on boot")
-            ErrorLogger.logInfo(context, TAG, "checkFirebaseStatusOnBoot", "Starting Firebase status check on boot")
+        // try {
+        //     log("Checking Firebase status on boot")
+        //     ErrorLogger.logInfo(context, TAG, "checkFirebaseStatusOnBoot", "Starting Firebase status check on boot")
             
-            // Check if Firebase is available
-            if (!FirebaseDeviceStatusManager.isFirebaseAvailable()) {
-                log("Firebase is not available on boot - skipping status check")
-                ErrorLogger.logWarning(context, TAG, "checkFirebaseStatusOnBoot", "Firebase is not available")
-                return
-            }
+        //     // Check if Firebase is available
+        //     if (!FirebaseDeviceStatusManager.isFirebaseAvailable()) {
+        //         log("Firebase is not available on boot - skipping status check")
+        //         ErrorLogger.logWarning(context, TAG, "checkFirebaseStatusOnBoot", "Firebase is not available")
+        //         return
+        //     }
             
-            // Use coroutines to handle async Firebase operations
-            runBlocking {
-                try {
-                    // Get device IMEI for Firebase operations
-                    val deviceId = FirebaseDeviceStatusManager.getDeviceImei(context)
-                    if (deviceId == null) {
-                        log("Could not get device IMEI on boot - skipping status check")
-                        ErrorLogger.logWarning(context, TAG, "checkFirebaseStatusOnBoot", "Could not get device IMEI")
-                        return@runBlocking
-                    }
+        //     // Use coroutines to handle async Firebase operations
+        //     runBlocking {
+        //         try {
+        //             // Get device IMEI for Firebase operations
+        //             val deviceId = FirebaseDeviceStatusManager.getDeviceImei(context)
+        //             if (deviceId == null) {
+        //                 log("Could not get device IMEI on boot - skipping status check")
+        //                 ErrorLogger.logWarning(context, TAG, "checkFirebaseStatusOnBoot", "Could not get device IMEI")
+        //                 return@runBlocking
+        //             }
                     
-                    log("Fetching device status from Firebase for device: $deviceId")
+        //             log("Fetching device status from Firebase for device: $deviceId")
                     
-                    // Fetch device status from Firebase
-                    val deviceStatus = FirebaseDeviceStatusManager.getDeviceStatus(context, deviceId)
-                    log("Device status from Firebase on boot: $deviceStatus")
+        //             // Fetch device status from Firebase
+        //             val deviceStatus = FirebaseDeviceStatusManager.getDeviceStatus(context, deviceId)
+        //             log("Device status from Firebase on boot: $deviceStatus")
                     
-                    when (deviceStatus) {
-                        "lock" -> {
-                            log("Device status is 'lock' on boot - launching app immediately")
-                            ErrorLogger.logInfo(context, TAG, "checkFirebaseStatusOnBoot", 
-                                "Device status is 'lock' on boot - launching app")
+        //             when (deviceStatus) {
+        //                 "lock" -> {
+        //                     log("Device status is 'lock' on boot - launching app immediately")
+        //                     ErrorLogger.logInfo(context, TAG, "checkFirebaseStatusOnBoot", 
+        //                         "Device status is 'lock' on boot - launching app")
                             
-                            // Launch the app immediately
-                            val appLaunched = AppStateManager.launchApp(context)
-                            if (appLaunched) {
-                                log("App launched successfully on boot for lock status")
-                                ErrorLogger.logInfo(context, TAG, "checkFirebaseStatusOnBoot", 
-                                    "App launched successfully on boot for lock status")
-                            } else {
-                                log("Failed to launch app on boot for lock status")
-                                ErrorLogger.logWarning(context, TAG, "checkFirebaseStatusOnBoot", 
-                                    "Failed to launch app on boot for lock status")
-                            }
-                        }
-                        "active" -> {
-                            log("Device status is 'active' on boot - no immediate action required")
-                            ErrorLogger.logInfo(context, TAG, "checkFirebaseStatusOnBoot", 
-                                "Device status is 'active' on boot - no immediate action required")
-                        }
-                        null -> {
-                            log("Could not retrieve device status from Firebase on boot")
-                            ErrorLogger.logWarning(context, TAG, "checkFirebaseStatusOnBoot", 
-                                "Could not retrieve device status from Firebase")
-                        }
-                        else -> {
-                            log("Device status is '$deviceStatus' on boot - no special action defined")
-                            ErrorLogger.logInfo(context, TAG, "checkFirebaseStatusOnBoot", 
-                                "Device status retrieved on boot", mapOf("status" to deviceStatus))
-                        }
-                    }
+        //                     // Launch the app immediately
+        //                     val appLaunched = AppStateManager.launchApp(context)
+        //                     if (appLaunched) {
+        //                         log("App launched successfully on boot for lock status")
+        //                         ErrorLogger.logInfo(context, TAG, "checkFirebaseStatusOnBoot", 
+        //                             "App launched successfully on boot for lock status")
+        //                     } else {
+        //                         log("Failed to launch app on boot for lock status")
+        //                         ErrorLogger.logWarning(context, TAG, "checkFirebaseStatusOnBoot", 
+        //                             "Failed to launch app on boot for lock status")
+        //                     }
+        //                 }
+        //                 "active" -> {
+        //                     log("Device status is 'active' on boot - no immediate action required")
+        //                     ErrorLogger.logInfo(context, TAG, "checkFirebaseStatusOnBoot", 
+        //                         "Device status is 'active' on boot - no immediate action required")
+        //                 }
+        //                 null -> {
+        //                     log("Could not retrieve device status from Firebase on boot")
+        //                     ErrorLogger.logWarning(context, TAG, "checkFirebaseStatusOnBoot", 
+        //                         "Could not retrieve device status from Firebase")
+        //                 }
+        //                 else -> {
+        //                     log("Device status is '$deviceStatus' on boot - no special action defined")
+        //                     ErrorLogger.logInfo(context, TAG, "checkFirebaseStatusOnBoot", 
+        //                         "Device status retrieved on boot", mapOf("status" to deviceStatus))
+        //                 }
+        //             }
                     
-                } catch (e: Exception) {
-                    log("Error in Firebase status check coroutine: ${e.message}")
-                    ErrorLogger.logError(context, TAG, "checkFirebaseStatusOnBoot-coroutine", e)
-                }
-            }
+        //         } catch (e: Exception) {
+        //             log("Error in Firebase status check coroutine: ${e.message}")
+        //             ErrorLogger.logError(context, TAG, "checkFirebaseStatusOnBoot-coroutine", e)
+        //         }
+        //     }
             
-        } catch (e: Exception) {
-            log("Error checking Firebase status on boot: ${e.message}")
-            ErrorLogger.logError(context, TAG, "checkFirebaseStatusOnBoot", e)
-        }
+        // } catch (e: Exception) {
+        //     log("Error checking Firebase status on boot: ${e.message}")
+        //     ErrorLogger.logError(context, TAG, "checkFirebaseStatusOnBoot", e)
+        // }
     }
     
 

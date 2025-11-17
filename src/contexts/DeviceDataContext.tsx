@@ -43,9 +43,6 @@ interface DeviceDataContextType {
   // Setup state
   isSettingUp: boolean;
   
-  // Service state
-  isServiceEnabled: boolean;
-  isServiceConfigured: boolean;
   
   // Initialization state
   isInitialized: boolean;
@@ -87,25 +84,8 @@ export const DeviceDataProvider: React.FC<DeviceDataProviderProps> = ({ children
     enabled: Platform.OS === 'android',
   });
 
-  // Query to check if WorkManager service is enabled
-  const {
-    data: serviceStatus,
-    isLoading: isCheckingService,
-  } = useQuery({
-    queryKey: ['device', 'service', 'status'],
-    queryFn: async () => {
-      if (Platform.OS !== 'android') {
-        return { enabled: false, workScheduled: false };
-      }
-      return await deviceAdminManager.isPeriodicServiceEnabled();
-    },
-    staleTime: QUERY_CONFIG.STALE_TIME.SHORT,
-    gcTime: QUERY_CONFIG.CACHE_TIME.SHORT,
-    retry: QUERY_CONFIG.RETRY.DEFAULT,
-    enabled: Platform.OS === 'android' && isDeviceAdminEnabled === true,
-  });
 
-  // Query for device data (only if device admin is enabled and service is configured)
+  // Query for device data (only if device admin is enabled)
   const {
     data: deviceData,
     isLoading: isLoadingDeviceData,
@@ -117,26 +97,18 @@ export const DeviceDataProvider: React.FC<DeviceDataProviderProps> = ({ children
     staleTime: QUERY_CONFIG.STALE_TIME.SHORT,
     gcTime: QUERY_CONFIG.CACHE_TIME.MEDIUM,
     retry: QUERY_CONFIG.RETRY.DEFAULT,
-    enabled: Platform.OS === 'android' && 
-             isDeviceAdminEnabled === true && 
-             serviceStatus?.enabled === true,
+    enabled: Boolean(isDeviceAdminEnabled),
     refetchInterval: QUERY_CONFIG.REFETCH_INTERVAL.DEVICE_STATUS
   });
 
   // Calculate derived state
   const isMonitoringEnabled = deviceData?.isEnabled ?? false;
-  const isLoading = isCheckingAdmin || isCheckingService || isLoadingDeviceData;
+  const isLoading = isCheckingAdmin || isLoadingDeviceData;
   const error = deviceError?.message || null;
-  
-  // Service state
-  const isServiceEnabled = serviceStatus?.enabled ?? false;
-  const isServiceConfigured = serviceStatus?.workScheduled ?? false;
   
   // Calculate initialization and navigation state
   const isInitialized = !isLoading && 
-                       isDeviceAdminEnabled !== undefined && 
-                       (Platform.OS !== 'android' || serviceStatus !== undefined);
-
+                       isDeviceAdminEnabled !== undefined;
   // Mutation for setting up device
   const setupDeviceMutation = useMutation({
     mutationFn: async (company: CompanyInfo): Promise<MonitoredDeviceData> => {
@@ -207,8 +179,6 @@ export const DeviceDataProvider: React.FC<DeviceDataProviderProps> = ({ children
     },
     onSuccess: (data) => {
       queryClient.setQueryData(QUERY_KEYS.DEVICE_DATA, data);
-      // Invalidate service status to refresh the UI
-      queryClient.invalidateQueries({ queryKey: ['device', 'service', 'status'] });
     },
     onError: (error) => {
       console.error('Error during device setup:', error);
@@ -267,9 +237,6 @@ export const DeviceDataProvider: React.FC<DeviceDataProviderProps> = ({ children
     // Setup state
     isSettingUp: isSettingUp || setupDeviceMutation.isPending,
     
-    // Service state
-    isServiceEnabled,
-    isServiceConfigured,
     
     // Initialization state
     isInitialized,

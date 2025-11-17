@@ -1,4 +1,4 @@
-import {FlatList, StyleSheet, Text, View, Alert, NativeMethods, NativeModules, TouchableOpacity} from 'react-native';
+import {FlatList, StyleSheet, Text, View, Alert} from 'react-native';
 import SvgIcon from "@/components/SvgIcon.tsx";
 import Icons from "@/constants/icons.ts";
 import Metrics from "@/utils/Metrics.ts";
@@ -24,17 +24,13 @@ export function HomeScreen() {
     isMonitoringEnabled, 
     isSettingUp, 
     setupDevice, 
-    deviceData, 
-    isServiceEnabled,
-    isServiceConfigured 
+    deviceData
   } = useDeviceData();
   const [company, setCompany] = useState<ICompany | null>(null);
   const bottomSheetRef = useRef<BottomSheetRef>(null);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
-  const deviceAdminManager = DeviceAdminManager.getInstance();
 
   const onPressBranchCard = () => {
-    if (bottomSheetRef.current && !isMonitoringEnabled && !isServiceEnabled) {
+    if (bottomSheetRef.current && !isMonitoringEnabled) {
       bottomSheetRef.current.open();
     }
   }
@@ -47,7 +43,7 @@ export function HomeScreen() {
   }
 
   const handleStartSetup = async () => {
-    if (!company || isMonitoringEnabled || isServiceEnabled) {
+    if (!company) {
       return;
     }
 
@@ -70,109 +66,6 @@ export function HomeScreen() {
     }
   }
 
-  // Debug methods for testing WorkManager
-  const debugWorkManager = async () => {
-    try {
-      console.log('🔍 Starting WorkManager Debug...');
-      
-      // Test 1: Check if DeviceAdminModule is available
-      console.log('DeviceAdminModule available:', !!DeviceAdminManager);
-      
-      // Test 2: Check current service status
-      const serviceStatus = await deviceAdminManager.isPeriodicServiceEnabled();
-      console.log('Service Status:', serviceStatus);
-      
-      // Test 3: Check device admin status
-      const isDeviceAdmin = await deviceAdminManager.isDeviceAdminEnabled();
-      console.log('Device Admin Enabled:', isDeviceAdmin);
-      
-      // Test 4: Check device owner status
-      const isDeviceOwner = await deviceAdminManager.isDeviceOwner();
-      console.log('Is Device Owner:', isDeviceOwner);
-      
-      // Test 5: Get detailed privilege status
-      const privilegeStatus = await deviceAdminManager.getServicePrivilegeStatus();
-      console.log('Privilege Status:', privilegeStatus);
-      
-      const debugData = {
-        serviceStatus,
-        isDeviceAdmin,
-        isDeviceOwner,
-        privilegeStatus,
-        timestamp: new Date().toLocaleString()
-      };
-      
-      setDebugInfo(debugData);
-      
-      Alert.alert('Debug Complete', 'Check console logs for detailed information');
-      
-    } catch (error: any) {
-      console.error('Debug Error:', error);
-      Alert.alert('Debug Failed', error.message || 'Unknown error occurred');
-    }
-  };
-
-  const testStartService = async () => {
-    try {
-      console.log('🚀 Testing Service Start...');
-      const result = await deviceAdminManager.startPeriodicService();
-      console.log('Start Service Result:', result);
-      Alert.alert('Service Start', result);
-    } catch (error: any) {
-      console.error('Start Service Error:', error);
-      Alert.alert('Start Service Failed', error.message || 'Unknown error');
-    }
-  };
-
-  const testStopService = async () => {
-    try {
-      console.log('⏹️ Testing Service Stop...');
-      const result = await deviceAdminManager.stopPeriodicService();
-      console.log('Stop Service Result:', result);
-      Alert.alert('Service Stop', result);
-    } catch (error: any) {
-      console.error('Stop Service Error:', error);
-      Alert.alert('Stop Service Failed', error.message || 'Unknown error');
-    }
-  };
-
-  const testInitializeService = async () => {
-    try {
-      console.log('🔄 Testing Service Initialize...');
-      const result = await deviceAdminManager.initializeServiceOnStartup();
-      console.log('Initialize Service Result:', result);
-      Alert.alert('Service Initialize', result);
-    } catch (error: any) {
-      console.error('Initialize Service Error:', error);
-      Alert.alert('Initialize Service Failed', error.message || 'Unknown error');
-    }
-  };
-
-  const testBootFirebaseCheck = async () => {
-    try {
-      console.log('🔄 Testing Boot Firebase Check...');
-      
-      const result = await deviceAdminManager.testBootFirebaseCheck();
-      console.log('Boot Firebase Check Result:', result);
-      Alert.alert('Boot Firebase Check', result);
-    } catch (error: any) {
-      console.error('Boot Firebase Check Error:', error);
-      Alert.alert('Boot Firebase Check Failed', error.message || 'Unknown error');
-    }
-  };
-
-  const simulateBootCompleted = async () => {
-    try {
-      console.log('🔄 Simulating Boot Completed...');
-      
-      const result = await deviceAdminManager.simulateBootCompleted();
-      console.log('Simulate Boot Result:', result);
-      Alert.alert('Boot Simulation', result);
-    } catch (error: any) {
-      console.error('Simulate Boot Error:', error);
-      Alert.alert('Boot Simulation Failed', error.message || 'Unknown error');
-    }
-  };
 
   useEffect(() => {
     if (deviceData?.company) {
@@ -180,9 +73,9 @@ export function HomeScreen() {
     }
   }, [deviceData])
 
-  // Determine what to show based on service and monitoring status
-  const showSetup = !isServiceEnabled && !isMonitoringEnabled;
-  const showMonitoring = isServiceEnabled && isMonitoringEnabled;
+  // Determine what to show based on monitoring status
+  const showSetup = !isMonitoringEnabled;
+  const showMonitoring = isMonitoringEnabled;
   const showCompanySelection = !company && showSetup;
 
   return (
@@ -326,56 +219,11 @@ export function HomeScreen() {
               <Text style={styles.blueBoldLabel}>Device Status</Text>
             </View>
             <Text style={styles.blueText}>
-              Service Enabled: {isServiceEnabled ? 'Yes' : 'No'}{'\n'}
-              Service Configured: {isServiceConfigured ? 'Yes' : 'No'}{'\n'}
               Monitoring: {isMonitoringEnabled ? 'Active' : 'Inactive'}
             </Text>
           </View>
         )}
 
-        {/* Debug Panel - Remove this in production */}
-        <View style={[styles.card, styles.debugPanel]}>
-          <Text style={styles.debugTitle}>🔧 WorkManager Debug Panel</Text>
-          
-          <View style={styles.debugButtonContainer}>
-            <TouchableOpacity style={styles.debugButton} onPress={debugWorkManager}>
-              <Text style={styles.debugButtonText}>Debug Status</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.debugButton} onPress={testStartService}>
-              <Text style={styles.debugButtonText}>Start Service</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.debugButton} onPress={testStopService}>
-              <Text style={styles.debugButtonText}>Stop Service</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.debugButton} onPress={testInitializeService}>
-              <Text style={styles.debugButtonText}>Initialize</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.debugButton} onPress={testBootFirebaseCheck}>
-              <Text style={styles.debugButtonText}>Test Boot Check</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.debugButton} onPress={simulateBootCompleted}>
-              <Text style={styles.debugButtonText}>Simulate Boot</Text>
-            </TouchableOpacity>
-          </View>
-          
-          {debugInfo && (
-            <View style={styles.debugInfo}>
-              <Text style={styles.debugInfoTitle}>Last Debug Result:</Text>
-              <Text style={styles.debugInfoText}>
-                Service Enabled: {debugInfo.serviceStatus?.enabled ? '✅' : '❌'}{'\n'}
-                Work Scheduled: {debugInfo.serviceStatus?.workScheduled ? '✅' : '❌'}{'\n'}
-                Device Admin: {debugInfo.isDeviceAdmin ? '✅' : '❌'}{'\n'}
-                Device Owner: {debugInfo.isDeviceOwner ? '✅' : '❌'}{'\n'}
-                Time: {debugInfo.timestamp}
-              </Text>
-            </View>
-          )}
-        </View>
 
         <BottomSheet ref={bottomSheetRef}>
           <CompanySelector 
@@ -564,52 +412,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // Debug Panel Styles
-  debugPanel: {
-    backgroundColor: '#2D3748',
-    borderWidth: 2,
-    borderColor: '#4A5568',
-  },
-  debugTitle: {
-    ...Fonts.Bold(Fonts.Size.normal),
-    color: '#E2E8F0',
-    marginBottom: Metrics.verticalScale(12),
-    textAlign: 'center',
-  },
-  debugButtonContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Metrics.scale(8),
-    justifyContent: 'space-between',
-    marginBottom: Metrics.verticalScale(12),
-  },
-  debugButton: {
-    backgroundColor: '#4C51BF',
-    paddingHorizontal: Metrics.scale(12),
-    paddingVertical: Metrics.verticalScale(8),
-    borderRadius: Metrics.scale(6),
-    flex: 1,
-    minWidth: '45%',
-    alignItems: 'center',
-  },
-  debugButtonText: {
-    ...Fonts.Medium(Fonts.Size.xSmall),
-    color: 'white',
-  },
-  debugInfo: {
-    backgroundColor: '#1A202C',
-    padding: Metrics.scale(12),
-    borderRadius: Metrics.scale(8),
-    marginTop: Metrics.verticalScale(8),
-  },
-  debugInfoTitle: {
-    ...Fonts.Bold(Fonts.Size.small),
-    color: '#63B3ED',
-    marginBottom: Metrics.verticalScale(8),
-  },
-  debugInfoText: {
-    ...Fonts.Regular(Fonts.Size.xSmall),
-    color: '#E2E8F0',
-    lineHeight: 18,
-  },
 })

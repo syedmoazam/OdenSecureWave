@@ -10,38 +10,6 @@ interface DeviceInfo {
   apiLevel: number;
 }
 
-interface DeviceAdminModuleInterface {
-  isDeviceAdminEnabled(): Promise<boolean>;
-  enableDeviceAdmin(): Promise<string>;
-  disableDeviceAdmin(): Promise<string>;
-  lockDevice(): Promise<string>;
-  wipeDevice(confirm: boolean): Promise<string>;
-  setPasswordPolicy(minLength: number): Promise<string>;
-  checkBootCompletedStatus(): Promise<boolean>;
-  setBootCompletedStatus(value: boolean): Promise<string>;
-  setCameraDisabled(disabled: boolean): Promise<string>;
-  isCameraDisabled(): Promise<boolean>;
-  setKeyguardDisabledFeatures(features: number): Promise<string>;
-  getKeyguardDisabledFeatures(): Promise<number>;
-  isDeviceOwner(): Promise<boolean>;
-  isProfileOwner(): Promise<boolean>;
-  testBridge(): Promise<string>;
-  getDeviceIMEI(): Promise<string>;
-  getDeviceInfo(): Promise<DeviceInfo>;
-  lockApp(): Promise<string>;
-  unlockApp(): Promise<string>;
-  launchApp(): Promise<string>;
-  closeApp(): Promise<string>;
-  startPeriodicService(): Promise<string>;
-  stopPeriodicService(): Promise<string>;
-  isPeriodicServiceEnabled(): Promise<{enabled: boolean; workScheduled: boolean}>;
-  configureDeviceOwnerPrivileges(): Promise<string>;
-  getServicePrivilegeStatus(): Promise<any>;
-  initializeServiceOnStartup(): Promise<string>;
-  testBootFirebaseCheck(): Promise<string>;
-  simulateBootCompleted(): Promise<string>;
-}
-
 const { DeviceAdminModule } = NativeModules;
 
 class DeviceAdminManager {
@@ -138,37 +106,6 @@ class DeviceAdminManager {
     return DeviceAdminModule.isCameraDisabled();
   }
 
-  // Set keyguard disabled features
-  async setKeyguardDisabledFeatures(features: number): Promise<string> {
-    if (Platform.OS !== 'android') {
-      throw new Error('Device Admin is only available on Android');
-    }
-    return DeviceAdminModule.setKeyguardDisabledFeatures(features);
-  }
-
-  // Get keyguard disabled features
-  async getKeyguardDisabledFeatures(): Promise<number> {
-    if (Platform.OS !== 'android') {
-      throw new Error('Device Admin is only available on Android');
-    }
-    return DeviceAdminModule.getKeyguardDisabledFeatures();
-  }
-
-  // Check if app is device owner
-  async isDeviceOwner(): Promise<boolean> {
-    if (Platform.OS !== 'android') {
-      throw new Error('Device Admin is only available on Android');
-    }
-    return DeviceAdminModule.isDeviceOwner();
-  }
-
-  // Check if app is profile owner
-  async isProfileOwner(): Promise<boolean> {
-    if (Platform.OS !== 'android') {
-      throw new Error('Device Admin is only available on Android');
-    }
-    return DeviceAdminModule.isProfileOwner();
-  }
 
   // Test if bridge is working
   async testBridge(): Promise<string> {
@@ -246,22 +183,6 @@ class DeviceAdminManager {
     }
   }
 
-  /**
-   * Launch/restart the application
-   */
-  public async launchApp(): Promise<string> {
-    try {
-      if (Platform.OS !== 'android') {
-        throw new Error('App launch control is only available on Android devices');
-      }
-      
-      const result = await DeviceAdminModule.launchApp();
-      return result;
-    } catch (error) {
-      console.error('Error launching app:', error);
-      throw error;
-    }
-  }
 
   /**
    * Close/terminate the application
@@ -297,39 +218,6 @@ class DeviceAdminManager {
     }
   }
 
-  /**
-   * Stop the WorkManager periodic service
-   */
-  public async stopPeriodicService(): Promise<string> {
-    try {
-      if (Platform.OS !== 'android') {
-        throw new Error('Periodic service is only available on Android devices');
-      }
-      
-      const result = await DeviceAdminModule.stopPeriodicService();
-      return result;
-    } catch (error) {
-      console.error('Error stopping periodic service:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Check if periodic service is enabled and scheduled
-   */
-  public async isPeriodicServiceEnabled(): Promise<{enabled: boolean; workScheduled: boolean}> {
-    try {
-      if (Platform.OS !== 'android') {
-        throw new Error('Periodic service is only available on Android devices');
-      }
-      
-      const result = await DeviceAdminModule.isPeriodicServiceEnabled();
-      return result;
-    } catch (error) {
-      console.error('Error checking periodic service status:', error);
-      throw error;
-    }
-  }
 
   /**
    * Configure Device Owner privileges for better service reliability
@@ -348,100 +236,7 @@ class DeviceAdminManager {
     }
   }
 
-  /**
-   * Get comprehensive service and privilege status
-   */
-  public async getServicePrivilegeStatus(): Promise<any> {
-    try {
-      if (Platform.OS !== 'android') {
-        throw new Error('Service status is only available on Android devices');
-      }
-      
-      const result = await DeviceAdminModule.getServicePrivilegeStatus();
-      return result;
-    } catch (error) {
-      console.error('Error getting service privilege status:', error);
-      throw error;
-    }
-  }
 
-  public async debugServiceStatus() {
-    try {
-      console.log('=== DEBUGGING SERVICE STATUS ===');
-      
-      // Check if DeviceAdminModule is available
-      console.log('DeviceAdminModule available:', !!DeviceAdminModule);
-      
-      // Check current service status
-      const status = await DeviceAdminModule.isPeriodicServiceEnabled();
-      console.log('Current service status:', status);
-      
-      // Try to start service manually
-      console.log('Attempting to start service...');
-      await DeviceAdminModule.startPeriodicService();
-      console.log('Service start command completed');
-      
-      // Check status again
-      const newStatus = await DeviceAdminModule.isPeriodicServiceEnabled();
-      console.log('New service status:', newStatus);
-      
-    } catch (error) {
-      console.error('Service debug error:', error);
-    }
-  };
-  
-  // Call this function when you want to debug
-  // debugServiceStatus();
-  /**
-   * Initialize service on startup (for debugging)
-   */
-  public async initializeServiceOnStartup(): Promise<string> {
-    try {
-      if (Platform.OS !== 'android') {
-        throw new Error('Service initialization is only available on Android devices');
-      }
-      
-      const result = await DeviceAdminModule.initializeServiceOnStartup();
-      return result;
-    } catch (error) {
-      console.error('Error initializing service on startup:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Test boot Firebase check (for debugging)
-   */
-  public async testBootFirebaseCheck(): Promise<string> {
-    try {
-      if (Platform.OS !== 'android') {
-        throw new Error('Boot Firebase check is only available on Android devices');
-      }
-      
-      const result = await DeviceAdminModule.testBootFirebaseCheck();
-      return result;
-    } catch (error) {
-      console.error('Error testing boot Firebase check:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Simulate boot completed broadcast (for debugging)
-   */
-  public async simulateBootCompleted(): Promise<string> {
-    try {
-      if (Platform.OS !== 'android') {
-        throw new Error('Boot simulation is only available on Android devices');
-      }
-      
-      const result = await DeviceAdminModule.simulateBootCompleted();
-      return result;
-    } catch (error) {
-      console.error('Error simulating boot completed:', error);
-      throw error;
-    }
-  }
 }
 
 export default DeviceAdminManager;
